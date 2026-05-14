@@ -11,6 +11,11 @@ export default function SignUpLoginView() {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupPending, setLookupPending] = useState(false);
 
+  const [registerName, setRegisterName] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [signUpError, setSignUpError] = useState<string | null>(null);
+  const [signUpPending, setSignUpPending] = useState(false);
+
   /**
    * Returns whether the user is already registered (`User` row exists).
    * On HTTP/network failure, sets `lookupError` and throws so the step stays on lookup.
@@ -54,6 +59,78 @@ export default function SignUpLoginView() {
     } catch {
       /* `lookupError` already set in verifyUser */
     }
+  }
+
+  /**
+   * 회원가입 폼 검증 후 `POST /api/users/signup` → 서버에서 `UserController.signUp` → `UserRepository.save`.
+   * 성공 시 `step === "login"`으로 전환합니다.
+   */
+  async function requestSignUp(): Promise<void> {
+    setSignUpError(null);
+
+    const sid = studentId.trim();
+    const uni = universityName.trim();
+    const nm = registerName.trim();
+    const pw = registerPassword;
+
+    if (!sid) {
+      setSignUpError("학번을 입력해 주세요.");
+      return;
+    }
+    if (!nm) {
+      setSignUpError("이름을 입력해 주세요.");
+      return;
+    }
+    if (!uni) {
+      setSignUpError("학교 이름을 입력해 주세요.");
+      return;
+    }
+    if (pw.length < 8) {
+      setSignUpError("비밀번호는 8자 이상 입력해 주세요.");
+      return;
+    }
+
+    setSignUpPending(true);
+    try {
+      const res = await fetch("/api/users/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: sid,
+          name: nm,
+          universityName: uni,
+          password: pw,
+        }),
+      });
+
+      let data: { ok?: boolean; error?: string } = {};
+      try {
+        data = (await res.json()) as { ok?: boolean; error?: string };
+      } catch {
+        /* ignore */
+      }
+
+      if (!res.ok || !data.ok) {
+        setSignUpError(
+          typeof data.error === "string"
+            ? data.error
+            : "회원가입에 실패했습니다. 이미 가입된 정보인지 확인해 주세요."
+        );
+        return;
+      }
+
+      setRegisterPassword("");
+      setStep("login");
+    } catch {
+      setSignUpError("네트워크 오류가 발생했습니다.");
+    } finally {
+      setSignUpPending(false);
+    }
+  }
+
+  async function handleRegisterSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await requestSignUp();
   }
 
   return (
@@ -150,7 +227,7 @@ export default function SignUpLoginView() {
         {step === "register" && (
           <form
             className="flex flex-col items-stretch gap-4 w-full max-w-sm"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={handleRegisterSubmit}
           >
             <p className="text-base text-zinc-900 dark:text-zinc-50">
               회원가입 — 정보를 입력해 주세요.
@@ -165,6 +242,8 @@ export default function SignUpLoginView() {
               required
             />
             <input
+              value={registerName}
+              onChange={(e) => setRegisterName(e.target.value)}
               autoComplete="name"
               placeholder="이름"
               className="h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
@@ -180,15 +259,32 @@ export default function SignUpLoginView() {
             />
             <input
               type="password"
+              value={registerPassword}
+              onChange={(e) => setRegisterPassword(e.target.value)}
               autoComplete="new-password"
               placeholder="비밀번호"
               className="h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
               required
             />
+            {signUpError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {signUpError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={signUpPending}
+              className="flex h-12 w-full items-center justify-center rounded-full bg-foreground px-8 text-base font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
+            >
+              {signUpPending ? "처리 중…" : "회원가입"}
+            </button>
             <button
               type="button"
               className="text-sm text-zinc-600 underline dark:text-zinc-400"
-              onClick={() => setStep("lookup")}
+              onClick={() => {
+                setSignUpError(null);
+                setStep("lookup");
+              }}
             >
               이전
             </button>

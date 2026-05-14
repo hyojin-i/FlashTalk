@@ -6,3 +6,11 @@ export interface User {
   universityName?: string;
   role?: "USER" | "ADMIN";
 }
+
+/** 회원가입 요청 본문 (클라이언트 → API) */
+export interface UserDTO {
+  studentId: string;
+  name: string;
+  universityName: string;
+  password: string;
+}

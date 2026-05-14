@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { UserRepository } from "@/repositories/UserRepository";
+import type { UserDTO } from "@/entities/User";
 
 const userRepository = new UserRepository();
 
@@ -12,7 +13,18 @@ export async function verifyUserRegistration(
 }
 
 export class UserController {
-  // 사용자 관리 로직
+  constructor(private readonly repository: UserRepository = userRepository) {}
+
+  async signUp(userDto: UserDTO): Promise<boolean> {
+    return this.repository.save(userDto);
+  }
+}
+
+const userController = new UserController(userRepository);
+
+/** Used by `POST /api/users/signup` */
+export async function signUpWithController(userDto: UserDTO): Promise<boolean> {
+  return userController.signUp(userDto);
 }
 
 export class UserSearchController {

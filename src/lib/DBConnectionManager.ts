@@ -1,8 +1,8 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Singleton DB access. Repositories obtain the client via
- * `DBConnectionManager.getInstance().getClient()`.
+ * Singleton DB access. 회원가입(`UserRepository.save`)·조회 등 모든 DB 접근은
+ * `DBConnectionManager.getInstance().getClient()`로 동일 인스턴스를 사용합니다.
  */
 export class DBConnectionManager {
   private static instance: DBConnectionManager;
