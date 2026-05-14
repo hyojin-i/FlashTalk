@@ -63,6 +63,7 @@ export default function SignUpLoginView() {
 
   /**
    * 회원가입 폼 검증 후 `POST /api/users/signup` → 서버에서 `UserController.signUp` → `UserRepository.save`.
+   * 비밀번호는 TLS로 전송되며, **서버**(`signup/route`)에서 scrypt로 해시한 뒤 DB에만 저장됩니다.
    * 성공 시 `step === "login"`으로 전환합니다.
    */
   async function requestSignUp(): Promise<void> {

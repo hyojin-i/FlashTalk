@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifyUserRegistration } from "../route";
+import { UserController } from "@/controllers/UserController";
+
+const userController = new UserController();
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +17,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const exists = await verifyUserRegistration(
+    const exists = await userController.verifyStudentId(
       studentId.trim(),
       universityName.trim()
     );
