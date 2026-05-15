@@ -29,3 +29,12 @@ export type LoginResult = {
 
 /** httpOnly 쿠키 등에 저장하는 사용자 세션 페이로드 */
 export type SessionPayload = SessionUserDTO & { sessionId: string };
+
+/** 사용자 검색 API 응답 DTO */
+export interface UserSearchResultDTO {
+  userId: string;
+  studentId: string;
+  name: string;
+  universityName: string;
+  isOnline: boolean;
+}
