@@ -7,7 +7,8 @@ export class UserPresenceRepository {
   }
 
   /**
-   * `UserPresence` 테이블 upsert (`isOnline` boolean, `sessionId` 선택).
+   * `UserPresence` 테이블 upsert (`isOnline`, `sessionId`, `lastSeen`).
+   * `sessionId`가 `undefined`이면 필드를 생략하고, `null`이면 DB에 `null`로 반영합니다.
    * `DBConnectionManager.getInstance()`로 클라이언트를 사용합니다.
    */
   async upsertPresence(

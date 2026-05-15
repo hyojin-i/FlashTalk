@@ -133,6 +133,14 @@ export class UserController {
   }
 
   /**
+   * 로그아웃: 접속 상태를 오프라인으로 갱신하고 `sessionId`를 제거합니다.
+   */
+  async logout(userId: string): Promise<boolean> {
+    await this.presenceController.updatePresence(userId, false, null);
+    return true;
+  }
+
+  /**
    * 클라이언트에서 받은 `UserDTO` 형태 본문을 검증·파싱하고 비밀번호를 해시한 뒤 저장합니다.
    * @throws {SignupPayloadInvalidError} 필수 필드가 없거나 형식이 잘못된 경우
    */

@@ -6,7 +6,7 @@ import { useState } from "react";
 
 type Step = "lookup" | "login" | "register";
 
-const CLIENT_SESSION_ID_KEY = "flashtalk_sessionId";
+import { CLIENT_SESSION_ID_KEY } from "@/lib/session";
 
 export default function SignUpLoginView() {
   const router = useRouter();

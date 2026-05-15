@@ -5,10 +5,9 @@ import {
   UserNotFoundError,
 } from "@/controllers/UserController";
 import type { SessionPayload } from "@/entities/User";
+import { SESSION_COOKIE } from "@/lib/session";
 
 const userController = new UserController();
-
-const SESSION_COOKIE = "flashtalk_session";
 const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7;
 
 export async function POST(request: Request) {
