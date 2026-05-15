@@ -1,9 +1,32 @@
 import { DBConnectionManager } from "@/lib/DBConnectionManager";
-import type { UserDTO } from "@/entities/User";
+import type { User, UserDTO } from "@/entities/User";
 
 export class UserRepository {
   private static get db() {
     return DBConnectionManager.getInstance().getClient();
+  }
+
+  /**
+   * 학번·학교로 `User` 테이블을 조회합니다.
+   * `DBConnectionManager.getInstance()`로 클라이언트를 사용합니다.
+   */
+  async inqueryUserInfo(
+    studentId: string,
+    universityName: string
+  ): Promise<User | null> {
+    const { data, error } = await UserRepository.db
+      .from("User")
+      .select("userId, studentId, name, universityName, password, role")
+      .eq("studentId", studentId)
+      .eq("universityName", universityName)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data) return null;
+    return data as User;
   }
 
   async checkUserExists(

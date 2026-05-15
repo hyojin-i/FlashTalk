@@ -1,15 +1,24 @@
 "use client";
 
+import type { SessionUserDTO } from "@/entities/User";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Step = "lookup" | "login" | "register";
 
+const CLIENT_SESSION_ID_KEY = "flashtalk_sessionId";
+
 export default function SignUpLoginView() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("lookup");
   const [studentId, setStudentId] = useState("");
   const [universityName, setUniversityName] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupPending, setLookupPending] = useState(false);
+
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginPending, setLoginPending] = useState(false);
 
   const [registerName, setRegisterName] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
@@ -134,6 +143,94 @@ export default function SignUpLoginView() {
     await requestSignUp();
   }
 
+  /**
+   * 로그인: `POST /api/users/login` → `UserController.login` → 세션 쿠키·`sessionId` 응답.
+   * `sessionId`는 `sessionStorage`에 저장합니다. 응답 `user.role`이 `USER`이면 `/main`, `ADMIN`이면 `/admin`으로 이동합니다.
+   */
+  function requestLogin(): void {
+    setLoginError(null);
+
+    const sid = studentId.trim();
+    const uni = universityName.trim();
+    const pw = loginPassword;
+
+    if (!sid) {
+      setLoginError("학번을 입력해 주세요.");
+      return;
+    }
+    if (!uni) {
+      setLoginError("학교 이름을 입력해 주세요.");
+      return;
+    }
+    if (!pw) {
+      setLoginError("비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    setLoginPending(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/users/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: sid,
+            universityName: uni,
+            password: pw,
+          }),
+        });
+
+        let data: {
+          ok?: boolean;
+          user?: SessionUserDTO;
+          sessionId?: string;
+          error?: string;
+        } = {};
+        try {
+          data = (await res.json()) as {
+            ok?: boolean;
+            user?: SessionUserDTO;
+            sessionId?: string;
+            error?: string;
+          };
+        } catch {
+          /* ignore */
+        }
+
+        if (
+          !res.ok ||
+          !data.ok ||
+          !data.user ||
+          typeof data.sessionId !== "string" ||
+          !data.sessionId
+        ) {
+          setLoginError(
+            typeof data.error === "string"
+              ? data.error
+              : "로그인에 실패했습니다. 정보를 확인해 주세요."
+          );
+          return;
+        }
+
+        try {
+          sessionStorage.setItem(CLIENT_SESSION_ID_KEY, data.sessionId);
+        } catch {
+          /* private mode / disabled storage */
+        }
+
+        if (data.user.role === "ADMIN") {
+          router.push("/admin");
+        } else {
+          router.push("/main");
+        }
+      } catch {
+        setLoginError("네트워크 오류가 발생했습니다.");
+      } finally {
+        setLoginPending(false);
+      }
+    })();
+  }
+
   return (
     <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-col items-center justify-center gap-6">
@@ -194,7 +291,10 @@ export default function SignUpLoginView() {
         {step === "login" && (
           <form
             className="flex flex-col items-stretch gap-4 w-full max-w-sm"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              requestLogin();
+            }}
           >
             <p className="text-base text-zinc-900 dark:text-zinc-50">
               로그인 — 학번과 비밀번호를 입력해 주세요.
@@ -209,16 +309,42 @@ export default function SignUpLoginView() {
               required
             />
             <input
+              value={universityName}
+              onChange={(e) => setUniversityName(e.target.value)}
+              autoComplete="organization"
+              placeholder="학교 이름"
+              className="h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+              required
+            />
+            <input
               type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
               autoComplete="current-password"
               placeholder="비밀번호"
               className="h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
               required
             />
+            {loginError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {loginError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={loginPending}
+              className="flex h-12 w-full items-center justify-center rounded-full bg-foreground px-8 text-base font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
+            >
+              {loginPending ? "로그인 중…" : "로그인"}
+            </button>
             <button
               type="button"
               className="text-sm text-zinc-600 underline dark:text-zinc-400"
-              onClick={() => setStep("lookup")}
+              onClick={() => {
+                setLoginError(null);
+                setLoginPassword("");
+                setStep("lookup");
+              }}
             >
               이전
             </button>

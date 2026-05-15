@@ -1,6 +1,7 @@
-import { randomBytes, scryptSync } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { UserPresenceController } from "@/controllers/UserPresenceController";
 import { UserRepository } from "@/repositories/UserRepository";
-import type { UserDTO } from "@/entities/User";
+import type { LoginResult, SessionUserDTO, User, UserDTO } from "@/entities/User";
 
 const SCRYPT_SALT_BYTES = 16;
 const SCRYPT_KEYLEN = 64;
@@ -9,6 +10,20 @@ export class SignupPayloadInvalidError extends Error {
   readonly name = "SignupPayloadInvalidError";
   constructor() {
     super("Invalid or incomplete signup payload");
+  }
+}
+
+export class UserNotFoundError extends Error {
+  readonly name = "UserNotFoundError";
+  constructor() {
+    super("User not found");
+  }
+}
+
+export class InvalidLoginPasswordError extends Error {
+  readonly name = "InvalidLoginPasswordError";
+  constructor() {
+    super("Invalid password");
   }
 }
 
@@ -27,6 +42,31 @@ function hashPassword(plain: string): string {
   return `scrypt$${N}$${r}$${p}$${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 
+function verifyPassword(plain: string, stored: string | undefined): boolean {
+  if (!stored || !stored.startsWith("scrypt$")) return false;
+  const parts = stored.split("$");
+  if (parts.length !== 6) return false;
+  const N = Number(parts[1]);
+  const r = Number(parts[2]);
+  const p = Number(parts[3]);
+  const saltHex = parts[4];
+  const hashHex = parts[5];
+  if (!Number.isFinite(N) || !Number.isFinite(r) || !Number.isFinite(p)) {
+    return false;
+  }
+  const salt = Buffer.from(saltHex, "hex");
+  const expected = Buffer.from(hashHex, "hex");
+  if (salt.length === 0 || expected.length === 0) return false;
+  const derived = scryptSync(plain, salt, SCRYPT_KEYLEN, {
+    N,
+    r,
+    p,
+    maxmem: 64 * 1024 * 1024,
+  });
+  if (derived.length !== expected.length) return false;
+  return timingSafeEqual(derived, expected);
+}
+
 function parseUserDTO(body: unknown): UserDTO | null {
   if (!body || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
@@ -39,18 +79,57 @@ function parseUserDTO(body: unknown): UserDTO | null {
   return { studentId, name, universityName, password };
 }
 
+function userToSessionDTO(user: User): SessionUserDTO {
+  const role: "USER" | "ADMIN" =
+    user.role === "ADMIN" ? "ADMIN" : "USER";
+  return {
+    userId: user.userId,
+    studentId: user.studentId ?? "",
+    name: user.name ?? "",
+    universityName: user.universityName ?? "",
+    role,
+  };
+}
+
 export class UserController {
-  constructor(private readonly repository: UserRepository = new UserRepository()) {}
+  constructor(
+    private readonly repository: UserRepository = new UserRepository(),
+    private readonly presenceController: UserPresenceController = new UserPresenceController()
+  ) {}
 
   /**
    * 학번·학교로 `User` 테이블에 등록된 사용자가 있는지 확인합니다.
-   * (기존 `verify/route`의 `verifyUserRegistration`과 동일한 비즈니스 규칙)
    */
   async verifyStudentId(
     studentId: string,
     universityName: string
   ): Promise<boolean> {
     return this.repository.checkUserExists(studentId, universityName);
+  }
+
+  /**
+   * 로그인: 사용자 조회 → 비밀번호 검증 → 접속 상태 갱신 → 사용자 DTO와 `sessionId` 반환.
+   * @throws {UserNotFoundError} 해당 학번·학교 조합의 사용자가 없을 때
+   * @throws {InvalidLoginPasswordError} 비밀번호가 일치하지 않을 때
+   */
+  async login(
+    studentId: string,
+    universityName: string,
+    password: string
+  ): Promise<LoginResult> {
+    const user = await this.repository.inqueryUserInfo(
+      studentId.trim(),
+      universityName.trim()
+    );
+    if (!user) {
+      throw new UserNotFoundError();
+    }
+    if (!verifyPassword(password, user.password)) {
+      throw new InvalidLoginPasswordError();
+    }
+    const sessionId = randomUUID();
+    await this.presenceController.updatePresence(user.userId, true, sessionId);
+    return { user: userToSessionDTO(user), sessionId };
   }
 
   /**
