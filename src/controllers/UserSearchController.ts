@@ -1,6 +1,7 @@
 import { UserPresenceRepository } from "@/repositories/UserPresenceRepository";
 import type { UserSearchResultDTO } from "@/entities/User";
 import { isPresenceEffectivelyOnline } from "@/lib/presence";
+import type { UserWithPresence } from "@/repositories/UserPresenceRepository";
 
 export class UserSearchController {
   constructor(
@@ -22,17 +23,39 @@ export class UserSearchController {
     );
     if (!row) return null;
 
-    const isOnline = isPresenceEffectivelyOnline(
-      row.presence.isOnline,
-      row.presence.lastSeen
-    );
+    return this.toSearchResult(row);
+  }
 
+  /** 같은 학교 전체 가입자 목록 */
+  async listUsers(universityName: string): Promise<UserSearchResultDTO[]> {
+    const rows = await this.presenceRepository.listUsersByUniversity(
+      universityName.trim()
+    );
+    return rows.map((row) => this.toSearchResult(row));
+  }
+
+  /** 학번·이름으로 같은 학교 사용자 검색 */
+  async searchUsers(
+    query: string,
+    universityName: string
+  ): Promise<UserSearchResultDTO[]> {
+    const rows = await this.presenceRepository.searchUsersByQuery(
+      query,
+      universityName.trim()
+    );
+    return rows.map((row) => this.toSearchResult(row));
+  }
+
+  private toSearchResult(row: UserWithPresence): UserSearchResultDTO {
     return {
       userId: row.user.userId,
       studentId: row.user.studentId ?? "",
       name: row.user.name ?? "",
       universityName: row.user.universityName,
-      isOnline,
+      isOnline: isPresenceEffectivelyOnline(
+        row.presence.isOnline,
+        row.presence.lastSeen
+      ),
     };
   }
 }

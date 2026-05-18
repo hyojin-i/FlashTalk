@@ -93,4 +93,68 @@ export class UserPresenceRepository {
 
     return { user, presence };
   }
+
+  /** 같은 학교 소속 사용자 목록과 접속 상태를 조회합니다. */
+  async listUsersByUniversity(
+    universityName: string
+  ): Promise<UserWithPresence[]> {
+    const { data: userRows, error: userError } =
+      await UserPresenceRepository.db
+        .from("User")
+        .select("userId, studentId, name, universityName, role")
+        .eq("universityName", universityName);
+
+    if (userError) throw new Error(userError.message);
+    if (!userRows?.length) return [];
+
+    return this.attachPresenceToUsers(userRows as User[]);
+  }
+
+  /** 학번·이름 부분 일치로 같은 학교 사용자를 검색합니다. */
+  async searchUsersByQuery(
+    query: string,
+    universityName: string
+  ): Promise<UserWithPresence[]> {
+    const q = query.trim();
+    if (!q) {
+      return this.listUsersByUniversity(universityName);
+    }
+
+    const escaped = q.replace(/[%_]/g, "\\$&");
+    const { data: userRows, error: userError } =
+      await UserPresenceRepository.db
+        .from("User")
+        .select("userId, studentId, name, universityName, role")
+        .eq("universityName", universityName)
+        .or(`studentId.ilike.%${escaped}%,name.ilike.%${escaped}%`);
+
+    if (userError) throw new Error(userError.message);
+    if (!userRows?.length) return [];
+
+    return this.attachPresenceToUsers(userRows as User[]);
+  }
+
+  private async attachPresenceToUsers(users: User[]): Promise<UserWithPresence[]> {
+    const userIds = users.map((u) => u.userId);
+    const { data: presenceRows, error: presenceError } =
+      await UserPresenceRepository.db
+        .from("UserPresence")
+        .select("userId, isOnline, lastSeen")
+        .in("userId", userIds);
+
+    if (presenceError) throw new Error(presenceError.message);
+
+    const presenceByUserId = new Map(
+      (presenceRows ?? []).map((row) => [row.userId as string, row as UserPresence])
+    );
+
+    return users.map((user) => ({
+      user,
+      presence: presenceByUserId.get(user.userId) ?? {
+        userId: user.userId,
+        isOnline: false,
+        lastSeen: null,
+      },
+    }));
+  }
 }
