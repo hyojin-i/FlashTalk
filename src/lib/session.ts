@@ -1,2 +1,2 @@
-export const SESSION_COOKIE = "flashtalk_session";
-export const CLIENT_SESSION_ID_KEY = "flashtalk_sessionId";
+export const CLIENT_JWT_KEY = "flashtalk_jwt";
+export const CLIENT_USER_KEY = "flashtalk_user";

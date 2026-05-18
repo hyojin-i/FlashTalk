@@ -4,11 +4,8 @@ import {
   UserController,
   UserNotFoundError,
 } from "@/controllers/UserController";
-import type { SessionPayload } from "@/entities/User";
-import { SESSION_COOKIE } from "@/lib/session";
 
 const userController = new UserController();
-const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7;
 
 export async function POST(request: Request) {
   try {
@@ -29,23 +26,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const { user, sessionId } = await userController.login(
+    const { user, token } = await userController.login(
       studentId,
       universityName,
       password
     );
 
-    const payload: SessionPayload = { ...user, sessionId };
-
-    const res = NextResponse.json({ ok: true, user, sessionId });
-    res.cookies.set(SESSION_COOKIE, JSON.stringify(payload), {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: SESSION_MAX_AGE_SEC,
-      secure: process.env.NODE_ENV === "production",
-    });
-    return res;
+    return NextResponse.json({ ok: true, user, token });
   } catch (e) {
     if (e instanceof UserNotFoundError) {
       return NextResponse.json(

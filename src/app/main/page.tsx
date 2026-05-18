@@ -1,15 +1,60 @@
 "use client";
 
-import type { UserSearchResultDTO } from "@/entities/User";
-import { CLIENT_SESSION_ID_KEY } from "@/lib/session";
+import type { SessionUserDTO, UserSearchResultDTO } from "@/entities/User";
+import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const PRESENCE_HEARTBEAT_MS = 60 * 1000;
+const USER_PRESENCE_CHANNEL = "user_presence_channel";
 
 const inputClassName =
   "h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50";
 
+function readStoredUser(): SessionUserDTO | null {
+  try {
+    const raw = sessionStorage.getItem(CLIENT_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const o = parsed as Record<string, unknown>;
+    if (typeof o.userId !== "string" || !o.userId) return null;
+    return parsed as SessionUserDTO;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredToken(): string | null {
+  try {
+    const token = sessionStorage.getItem(CLIENT_JWT_KEY);
+    return token && token.length > 0 ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+async function postPresence(
+  token: string,
+  body: { isOnline: boolean } | { heartbeat: true }
+): Promise<boolean> {
+  const res = await fetch("/api/presence", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  return res.ok;
+}
+
 export default function MainView() {
   const router = useRouter();
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -21,6 +66,59 @@ export default function MainView() {
   const [searchedUser, setSearchedUser] = useState<UserSearchResultDTO | null>(
     null
   );
+
+  useEffect(() => {
+    const token = readStoredToken();
+    const user = readStoredUser();
+    if (!token || !user) {
+      router.replace("/login");
+      return;
+    }
+
+    let cancelled = false;
+    let heartbeatId: number | undefined;
+    const supabase = getBrowserSupabaseClient();
+
+    void (async () => {
+      await supabase.realtime.setAuth(token);
+      if (cancelled) return;
+
+      const channel = supabase.channel(USER_PRESENCE_CHANNEL);
+      channelRef.current = channel;
+
+      channel.on(
+        "broadcast",
+        { event: "INVITE_TO_ROOM" },
+        (payload) => {
+          console.info("[INVITE_TO_ROOM]", payload);
+        }
+      );
+
+      channel.subscribe(async (status) => {
+        if (cancelled || status !== "SUBSCRIBED") return;
+
+        await postPresence(token, { isOnline: true });
+        await channel.track({ isOnline: true, userId: user.userId });
+      });
+
+      heartbeatId = window.setInterval(() => {
+        void postPresence(token, { heartbeat: true });
+      }, PRESENCE_HEARTBEAT_MS);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (heartbeatId !== undefined) {
+        window.clearInterval(heartbeatId);
+      }
+      const ch = channelRef.current;
+      if (ch) {
+        void ch.untrack();
+        void supabase.removeChannel(ch);
+        channelRef.current = null;
+      }
+    };
+  }, [router]);
 
   function displaySearchedUser(userSearchResult: UserSearchResultDTO): void {
     setSearchedUser(userSearchResult);
@@ -48,7 +146,6 @@ export default function MainView() {
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({
             universityName: uni,
             studentId: sid,
@@ -71,9 +168,7 @@ export default function MainView() {
         }
 
         if (res.status === 404) {
-          setSearchError(
-            data.error ?? "해당 사용자가 없습니다."
-          );
+          setSearchError(data.error ?? "해당 사용자가 없습니다.");
           return;
         }
 
@@ -99,10 +194,18 @@ export default function MainView() {
     if (logoutPending) return;
     setLogoutError(null);
     setLogoutPending(true);
+
+    const token = readStoredToken();
+
     try {
+      const headers: HeadersInit = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const res = await fetch("/api/users/logout", {
         method: "POST",
-        credentials: "include",
+        headers,
       });
 
       let data: { ok?: boolean; error?: string } = {};
@@ -121,8 +224,16 @@ export default function MainView() {
         return;
       }
 
+      const ch = channelRef.current;
+      if (ch) {
+        await ch.untrack();
+        await getBrowserSupabaseClient().removeChannel(ch);
+        channelRef.current = null;
+      }
+
       try {
-        sessionStorage.removeItem(CLIENT_SESSION_ID_KEY);
+        sessionStorage.removeItem(CLIENT_JWT_KEY);
+        sessionStorage.removeItem(CLIENT_USER_KEY);
       } catch {
         /* ignore */
       }

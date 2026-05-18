@@ -13,28 +13,17 @@ export class UserPresenceRepository {
   }
 
   /**
-   * `UserPresence` 테이블 upsert (`isOnline`, `sessionId`, `lastSeen`).
-   * `sessionId`가 `undefined`이면 필드를 생략하고, `null`이면 DB에 `null`로 반영합니다.
+   * `UserPresence` 테이블 upsert (`isOnline`, `lastSeen`).
    * `DBConnectionManager.getInstance()`로 클라이언트를 사용합니다.
    */
-  async upsertPresence(
-    userId: string,
-    isOnline: boolean,
-    sessionId?: string | null
-  ): Promise<void> {
+  async upsertPresence(userId: string, isOnline: boolean): Promise<void> {
     const lastSeen = new Date().toISOString();
 
-    const row: Pick<UserPresence, "userId" | "isOnline"> & {
-      lastSeen: string;
-      sessionId?: string | null;
-    } = {
+    const row = {
       userId,
       isOnline,
       lastSeen,
     };
-    if (sessionId !== undefined) {
-      row.sessionId = sessionId;
-    }
 
     const { error } = await UserPresenceRepository.db
       .from("UserPresence")
@@ -42,6 +31,20 @@ export class UserPresenceRepository {
 
     if (error) {
       console.error("[UserPresenceRepository.upsertPresence]", error.message);
+      throw new Error(error.message);
+    }
+  }
+
+  /** Heartbeat: `lastSeen`만 현재 시각으로 갱신합니다. */
+  async updateLastSeen(userId: string): Promise<void> {
+    const lastSeen = new Date().toISOString();
+    const { error } = await UserPresenceRepository.db
+      .from("UserPresence")
+      .update({ lastSeen, isOnline: true })
+      .eq("userId", userId);
+
+    if (error) {
+      console.error("[UserPresenceRepository.updateLastSeen]", error.message);
       throw new Error(error.message);
     }
   }
@@ -72,7 +75,7 @@ export class UserPresenceRepository {
     const { data: presenceRow, error: presenceError } =
       await UserPresenceRepository.db
         .from("UserPresence")
-        .select("userId, isOnline, sessionId, lastSeen")
+        .select("userId, isOnline, lastSeen")
         .eq("userId", user.userId)
         .maybeSingle();
 
@@ -85,7 +88,6 @@ export class UserPresenceRepository {
       : {
           userId: user.userId,
           isOnline: false,
-          sessionId: null,
           lastSeen: null,
         };
 

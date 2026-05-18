@@ -1,7 +1,8 @@
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { UserPresenceController } from "@/controllers/UserPresenceController";
 import { UserRepository } from "@/repositories/UserRepository";
 import type { LoginResult, SessionUserDTO, User, UserDTO } from "@/entities/User";
+import { signUserToken } from "@/lib/jwt";
 
 const SCRYPT_SALT_BYTES = 16;
 const SCRYPT_KEYLEN = 64;
@@ -108,7 +109,8 @@ export class UserController {
   }
 
   /**
-   * 로그인: 사용자 조회 → 비밀번호 검증 → 접속 상태 갱신 → 사용자 DTO와 `sessionId` 반환.
+   * 로그인: 사용자 조회 → 비밀번호 검증 → JWT 발급.
+   * 접속 상태는 `/main`에서 Realtime 구독 후 갱신합니다.
    * @throws {UserNotFoundError} 해당 학번·학교 조합의 사용자가 없을 때
    * @throws {InvalidLoginPasswordError} 비밀번호가 일치하지 않을 때
    */
@@ -127,16 +129,14 @@ export class UserController {
     if (!verifyPassword(password, user.password)) {
       throw new InvalidLoginPasswordError();
     }
-    const sessionId = randomUUID();
-    await this.presenceController.updatePresence(user.userId, true, sessionId);
-    return { user: userToSessionDTO(user), sessionId };
+    const sessionUser = userToSessionDTO(user);
+    const token = await signUserToken(sessionUser);
+    return { user: sessionUser, token };
   }
 
-  /**
-   * 로그아웃: 접속 상태를 오프라인으로 갱신하고 `sessionId`를 제거합니다.
-   */
+  /** 로그아웃: 접속 상태를 오프라인으로 갱신합니다. */
   async logout(userId: string): Promise<boolean> {
-    await this.presenceController.updatePresence(userId, false, null);
+    await this.presenceController.updatePresence(userId, false);
     return true;
   }
 

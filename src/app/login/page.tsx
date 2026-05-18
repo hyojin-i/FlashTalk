@@ -6,7 +6,7 @@ import { useState } from "react";
 
 type Step = "lookup" | "login" | "register";
 
-import { CLIENT_SESSION_ID_KEY } from "@/lib/session";
+import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 
 export default function SignUpLoginView() {
   const router = useRouter();
@@ -144,8 +144,8 @@ export default function SignUpLoginView() {
   }
 
   /**
-   * 로그인: `POST /api/users/login` → `UserController.login` → 세션 쿠키·`sessionId` 응답.
-   * `sessionId`는 `sessionStorage`에 저장합니다. 응답 `user.role`이 `USER`이면 `/main`, `ADMIN`이면 `/admin`으로 이동합니다.
+   * 로그인: `POST /api/users/login` → `UserController.login` → JWT 발급.
+   * `token`과 `user`는 `sessionStorage`에 저장합니다. `user.role`이 `USER`이면 `/main`, `ADMIN`이면 `/admin`으로 이동합니다.
    */
   function requestLogin(): void {
     setLoginError(null);
@@ -183,14 +183,14 @@ export default function SignUpLoginView() {
         let data: {
           ok?: boolean;
           user?: SessionUserDTO;
-          sessionId?: string;
+          token?: string;
           error?: string;
         } = {};
         try {
           data = (await res.json()) as {
             ok?: boolean;
             user?: SessionUserDTO;
-            sessionId?: string;
+            token?: string;
             error?: string;
           };
         } catch {
@@ -201,8 +201,8 @@ export default function SignUpLoginView() {
           !res.ok ||
           !data.ok ||
           !data.user ||
-          typeof data.sessionId !== "string" ||
-          !data.sessionId
+          typeof data.token !== "string" ||
+          !data.token
         ) {
           setLoginError(
             typeof data.error === "string"
@@ -213,7 +213,8 @@ export default function SignUpLoginView() {
         }
 
         try {
-          sessionStorage.setItem(CLIENT_SESSION_ID_KEY, data.sessionId);
+          sessionStorage.setItem(CLIENT_JWT_KEY, data.token);
+          sessionStorage.setItem(CLIENT_USER_KEY, JSON.stringify(data.user));
         } catch {
           /* private mode / disabled storage */
         }
