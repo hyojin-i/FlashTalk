@@ -1,6 +1,4 @@
 export interface ChatRoom {
-    id: string;
-    name: string;
+    roomId: string;
     createdAt: Date;
-    // 채팅방 엔티티 속성
 }
