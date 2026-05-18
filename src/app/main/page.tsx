@@ -36,17 +36,14 @@ function readStoredToken(): string | null {
   }
 }
 
-async function postPresence(
-  token: string,
-  body: { isOnline: boolean } | { heartbeat: true }
-): Promise<boolean> {
+async function postPresenceHeartbeat(token: string): Promise<boolean> {
   const res = await fetch("/api/presence", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ heartbeat: true }),
   });
   return res.ok;
 }
@@ -147,12 +144,11 @@ export default function MainView() {
 
       channel.subscribe(async (status) => {
         if (cancelled || status !== "SUBSCRIBED") return;
-        await postPresence(token, { isOnline: true });
         await channel.track({ isOnline: true, userId: user.userId });
       });
 
       heartbeatId = window.setInterval(() => {
-        void postPresence(token, { heartbeat: true });
+        void postPresenceHeartbeat(token);
       }, PRESENCE_HEARTBEAT_MS);
     })();
 

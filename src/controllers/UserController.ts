@@ -109,8 +109,7 @@ export class UserController {
   }
 
   /**
-   * 로그인: 사용자 조회 → 비밀번호 검증 → JWT 발급.
-   * 접속 상태는 `/main`에서 Realtime 구독 후 갱신합니다.
+   * 로그인: 사용자 조회 → 비밀번호 검증 → 접속 상태 온라인 반영 → JWT 발급.
    * @throws {UserNotFoundError} 해당 학번·학교 조합의 사용자가 없을 때
    * @throws {InvalidLoginPasswordError} 비밀번호가 일치하지 않을 때
    */
@@ -130,6 +129,7 @@ export class UserController {
       throw new InvalidLoginPasswordError();
     }
     const sessionUser = userToSessionDTO(user);
+    await this.presenceController.updatePresence(user.userId, true);
     const token = await signUserToken(sessionUser);
     return { user: sessionUser, token };
   }
