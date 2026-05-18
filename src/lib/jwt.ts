@@ -5,10 +5,10 @@ const JWT_AUDIENCE = "authenticated";
 const JWT_EXPIRY = "7d";
 
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.SUPABASE_JWT_SECRET;
+  const secret = process.env.SUPABASE_JWT_KEY;
   if (!secret) {
     throw new Error(
-      "SUPABASE_JWT_SECRET is not set. Use the JWT secret from your Supabase project settings."
+      "SUPABASE_JWT_KEY is not set. In Supabase Dashboard → Project Settings → API → JWT Settings, copy the JWT Secret into .env or .env.local."
     );
   }
   return new TextEncoder().encode(secret);

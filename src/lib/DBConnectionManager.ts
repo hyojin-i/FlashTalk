@@ -10,12 +10,12 @@ export class DBConnectionManager {
 
   private constructor() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = process.env.SUPABASE_SECRET_KEY;
 
     // 환경 변수가 설정되지 않았을 경우 발생할 수 있는 런타임 에러를 방지
     if (!supabaseUrl || !supabaseKey) {
       throw new Error(
-        "Supabase 환경 변수가 설정되지 않았습니다. .env.local 파일에 NEXT_PUBLIC_SUPABASE_URL와 SUPABASE_SERVICE_ROLE_KEY가 있는지 확인해주세요."
+        "Supabase 환경 변수가 설정되지 않았습니다. .env 또는 .env.local에 NEXT_PUBLIC_SUPABASE_URL와 SUPABASE_SECRET_KEY를 설정했는지 확인해주세요."
       );
     }
 
