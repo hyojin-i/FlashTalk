@@ -13,16 +13,16 @@ export class UserPresenceRepository {
   }
 
   /**
-   * `UserPresence` 테이블 upsert (`isOnline`, `lastSeen`).
+   * `UserPresence` 테이블 upsert (`isOnline`, `lastSeenAt`).
    * `DBConnectionManager.getInstance()`로 클라이언트를 사용합니다.
    */
   async upsertPresence(userId: string, isOnline: boolean): Promise<void> {
-    const lastSeen = new Date().toISOString();
+    const lastSeenAt = new Date().toISOString();
 
     const row = {
       userId,
       isOnline,
-      lastSeen,
+      lastSeenAt,
     };
 
     const { error } = await UserPresenceRepository.db
@@ -35,16 +35,16 @@ export class UserPresenceRepository {
     }
   }
 
-  /** Heartbeat: `lastSeen`만 현재 시각으로 갱신합니다. */
-  async updateLastSeen(userId: string): Promise<void> {
-    const lastSeen = new Date().toISOString();
+  /** Heartbeat: `lastSeenAt`만 현재 시각으로 갱신합니다. */
+  async updatelastSeenAt(userId: string): Promise<void> {
+    const lastSeenAt = new Date().toISOString();
     const { error } = await UserPresenceRepository.db
       .from("UserPresence")
-      .update({ lastSeen, isOnline: true })
+      .update({ lastSeenAt, isOnline: true })
       .eq("userId", userId);
 
     if (error) {
-      console.error("[UserPresenceRepository.updateLastSeen]", error.message);
+      console.error("[UserPresenceRepository.updatelastSeenAt]", error.message);
       throw new Error(error.message);
     }
   }
@@ -75,7 +75,7 @@ export class UserPresenceRepository {
     const { data: presenceRow, error: presenceError } =
       await UserPresenceRepository.db
         .from("UserPresence")
-        .select("userId, isOnline, lastSeen")
+        .select("userId, isOnline, lastSeenAt")
         .eq("userId", user.userId)
         .maybeSingle();
 
@@ -88,7 +88,7 @@ export class UserPresenceRepository {
       : {
           userId: user.userId,
           isOnline: false,
-          lastSeen: null,
+          lastSeenAt: null,
         };
 
     return { user, presence };
@@ -139,7 +139,7 @@ export class UserPresenceRepository {
     const { data: presenceRows, error: presenceError } =
       await UserPresenceRepository.db
         .from("UserPresence")
-        .select("userId, isOnline, lastSeen")
+        .select("userId, isOnline, lastSeenAt")
         .in("userId", userIds);
 
     if (presenceError) throw new Error(presenceError.message);
@@ -153,7 +153,7 @@ export class UserPresenceRepository {
       presence: presenceByUserId.get(user.userId) ?? {
         userId: user.userId,
         isOnline: false,
-        lastSeen: null,
+        lastSeenAt: null,
       },
     }));
   }
