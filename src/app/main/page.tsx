@@ -37,15 +37,21 @@ function readStoredToken(): string | null {
 }
 
 async function postPresenceHeartbeat(token: string): Promise<boolean> {
-  const res = await fetch("/api/presence", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ heartbeat: true }),
-  });
-  return res.ok;
+  try {
+    const res = await fetch("/api/presence", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ heartbeat: true }),
+    });
+    return res.ok;
+  } catch (error) {
+    // 네트워크 단절, 페이지 이동 중 취소 등 브라우저 레벨 에러 발생 시 조용히 무시(false 반환)
+    console.warn("Heartbeat fetch failed (ignored):", error);
+    return false;
+  }
 }
 
 function nameInitial(name: string): string {
@@ -164,13 +170,14 @@ export default function MainView() {
     };
   }, [router]);
 
-  function toggleUserSelection(userId: string): void {
+  function toggleUserSelection(user: UserSearchResultDTO): void {
     setCreateChatError(null);
     setSelectedUserIds((prev) => {
-      if (prev.includes(userId)) {
-        return prev.filter((id) => id !== userId);
+      if (prev.includes(user.userId)) {
+        return prev.filter((id) => id !== user.userId);
       }
-      return [...prev, userId];
+      if (!user.isOnline) return prev;
+      return [...prev, user.userId];
     });
   }
 
@@ -499,16 +506,19 @@ export default function MainView() {
             )}
             {visibleUsers.map((user) => {
               const isSelected = selectedUserIds.includes(user.userId);
+              const canSelect = user.isOnline || isSelected;
               return (
                 <li key={user.userId}>
                   <button
                     type="button"
-                    onClick={() => toggleUserSelection(user.userId)}
+                    onClick={() => toggleUserSelection(user)}
+                    disabled={!canSelect}
+                    aria-disabled={!canSelect}
                     className={`flex w-full items-center gap-3 rounded-2xl border-2 bg-white px-4 py-3 text-left transition-colors dark:bg-zinc-950 ${
                       isSelected
                         ? "border-sky-400 bg-sky-50/80 dark:border-sky-500 dark:bg-sky-950/30"
                         : "border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
-                    }`}
+                    } ${!canSelect ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     <span
                       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
@@ -557,7 +567,7 @@ export default function MainView() {
                         )}
                       </span>
                       <span className="mt-0.5 block text-sm text-zinc-500 dark:text-zinc-400">
-                        {user.studentId} | {user.universityName}
+                        {user.studentId} | {user.universityName} | {user.isOnline}
                       </span>
                     </span>
                   </button>

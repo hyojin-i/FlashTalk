@@ -1,6 +1,5 @@
 import { UserPresenceRepository } from "@/repositories/UserPresenceRepository";
 import type { UserSearchResultDTO } from "@/entities/User";
-import { isPresenceEffectivelyOnline } from "@/lib/presence";
 import type { UserWithPresence } from "@/repositories/UserPresenceRepository";
 
 export class UserSearchController {
@@ -10,7 +9,6 @@ export class UserSearchController {
 
   /**
    * 학번·학교로 사용자와 접속 상태를 조회해 `UserSearchResultDTO`를 반환합니다.
-   * 마지막 heartbeat가 2분을 초과하면 오프라인으로 간주합니다.
    * 해당 사용자가 없으면 `null`을 반환합니다.
    */
   async searchUser(
@@ -52,10 +50,7 @@ export class UserSearchController {
       studentId: row.user.studentId ?? "",
       name: row.user.name ?? "",
       universityName: row.user.universityName,
-      isOnline: isPresenceEffectivelyOnline(
-        row.presence.isOnline,
-        row.presence.lastSeen
-      ),
+      isOnline: row.presence.isOnline,
     };
   }
 }
