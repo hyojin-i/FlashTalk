@@ -336,8 +336,8 @@ export default function MainView() {
 
       const ch = channelRef.current;
       if (ch) {
-        await ch.untrack();
-        await getBrowserSupabaseClient().removeChannel(ch);
+        ch.untrack();
+        getBrowserSupabaseClient().removeChannel(ch);
         channelRef.current = null;
       }
 
