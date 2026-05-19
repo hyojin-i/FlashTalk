@@ -1,7 +1,10 @@
 export interface FileInfo {
-    id: string;
+    fileId: string;
     fileName: string;
-    fileUrl: string;
+    filePath: string;
+    fileSize: number;
+    fileType: string;
+    userId: string;
     uploadedAt: Date;
-    // 파일 정보 엔티티 속성
+    downloadedAt?: Date;
 }

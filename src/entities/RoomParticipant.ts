@@ -1,6 +1,6 @@
 export interface RoomParticipant {
-    roomId: string;
+    ParticipantId: string;
     userId: string;
+    roomId: string;
     joinedAt: Date;
-    // 채팅방 참여자 엔티티 속성
 }
