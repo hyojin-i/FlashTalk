@@ -452,7 +452,7 @@ export default function MainView() {
                       }`}
                       aria-hidden
                     />
-                    {user.name}b
+                    {user.name}
                   </span>
                 ))}
               </div>
