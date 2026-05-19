@@ -273,14 +273,14 @@ export default function MainView() {
       body: JSON.stringify({ participantUserIds }),
     });
 
-    let data: { ok?: boolean; roomId?: string; error?: string } = {};
+    let data: { roomId?: string; error?: string; ok?: boolean } = {};
     try {
       data = (await res.json()) as typeof data;
     } catch {
       /* ignore */
     }
 
-    if (!res.ok || !data.ok || typeof data.roomId !== "string") {
+    if (!res.ok || typeof data.roomId !== "string") {
       throw new Error(
         typeof data.error === "string"
           ? data.error
@@ -291,6 +291,10 @@ export default function MainView() {
     return data.roomId;
   }
 
+  function navigateToChatView(roomId: string): void {
+    router.push(`/chat/${roomId}`);
+  }
+
   function handleStartChat(): void {
     if (selectedUserIds.length === 0 || createChatPending) return;
     setCreateChatError(null);
@@ -298,7 +302,7 @@ export default function MainView() {
     void (async () => {
       try {
         const roomId = await requestCreateChatRoom(selectedUserIds);
-        if (roomId) router.push(`/chat/${roomId}`);
+        if (roomId) navigateToChatView(roomId);
       } catch (e) {
         setCreateChatError(
           e instanceof Error ? e.message : "채팅방 생성에 실패했습니다."
@@ -486,7 +490,7 @@ export default function MainView() {
                 className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 <ChatBubbleIcon />
-                {createChatPending ? "생성 중…" : "대화 시작"}
+                {createChatPending ? "생성 중…" : "Start Chat"}
               </button>
             </div>
           </section>

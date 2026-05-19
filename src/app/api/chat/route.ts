@@ -30,12 +30,13 @@ export async function POST(request: Request) {
       (id): id is string => typeof id === "string" && id.trim().length > 0
     );
 
-    const roomId = await chatRoomController.createChatRoom(
-      hostUserId,
-      selectedUserIds
-    );
+    const userIdList = [
+      ...new Set([hostUserId, ...selectedUserIds.map((id) => id.trim())]),
+    ];
 
-    return NextResponse.json({ ok: true, roomId });
+    const roomId = await chatRoomController.createRoom(userIdList);
+
+    return NextResponse.json({ roomId }, { status: 200 });
   } catch (e) {
     if (e instanceof ChatRoomParticipantRequiredError) {
       return NextResponse.json(
