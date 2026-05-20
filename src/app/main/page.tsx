@@ -1,6 +1,11 @@
 "use client";
 
 import type { SessionUserDTO, UserSearchResultDTO } from "@/entities/User";
+import {
+  INVITE_TO_ROOM_EVENT,
+  type InviteToRoomPayload,
+  userPresenceChannelName,
+} from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -8,7 +13,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const PRESENCE_HEARTBEAT_MS = 60 * 1000;
-const USER_PRESENCE_CHANNEL = "user_presence_channel";
 
 const inputClassName =
   "h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50";
@@ -137,14 +141,17 @@ export default function MainView() {
       await supabase.realtime.setAuth(token);
       if (cancelled) return;
 
-      const channel = supabase.channel(USER_PRESENCE_CHANNEL);
+      const channel = supabase.channel(userPresenceChannelName(user.userId));
       channelRef.current = channel;
 
       channel.on(
         "broadcast",
-        { event: "INVITE_TO_ROOM" },
-        (payload) => {
-          console.info("[INVITE_TO_ROOM]", payload);
+        { event: INVITE_TO_ROOM_EVENT },
+        ({ payload }) => {
+          const invite = payload as InviteToRoomPayload;
+          if (typeof invite?.roomId === "string") {
+            router.push(`/chat/${invite.roomId}`);
+          }
         }
       );
 
@@ -490,7 +497,7 @@ export default function MainView() {
                 className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 <ChatBubbleIcon />
-                {createChatPending ? "생성 중…" : "Start Chat"}
+                {createChatPending ? "생성 중…" : "대화 시작"}
               </button>
             </div>
           </section>
@@ -571,7 +578,7 @@ export default function MainView() {
                         )}
                       </span>
                       <span className="mt-0.5 block text-sm text-zinc-500 dark:text-zinc-400">
-                        {user.studentId} | {user.universityName} | {user.isOnline}
+                        {user.studentId} | {user.universityName} | {user.isOnline ? "온라인" : "오프라인"}
                       </span>
                     </span>
                   </button>

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       ...new Set([hostUserId, ...selectedUserIds.map((id) => id.trim())]),
     ];
 
-    const roomId = await chatRoomController.createRoom(userIdList);
+    const roomId = await chatRoomController.createRoom(userIdList, hostUserId);
 
     return NextResponse.json({ roomId }, { status: 200 });
   } catch (e) {

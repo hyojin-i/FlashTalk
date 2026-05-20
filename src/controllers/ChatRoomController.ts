@@ -1,4 +1,5 @@
 import type { ChatRoom } from "@/entities/ChatRoom";
+import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { ChatRoomRepository } from "@/repositories/ChatRoomRepository";
 
 export class ChatRoomParticipantRequiredError extends Error {
@@ -17,7 +18,10 @@ export class ChatRoomController {
    * 참가자 목록으로 채팅방을 조회·생성하고 `roomId`를 반환합니다.
    * 1:1(참가자 2명)이면 기존 방이 있으면 재사용합니다.
    */
-  async createRoom(userIdList: string[]): Promise<string> {
+  async createRoom(
+    userIdList: string[],
+    inviterUserId: string
+  ): Promise<string> {
     const memberIds = [
       ...new Set(userIdList.map((id) => id.trim()).filter(Boolean)),
     ];
@@ -36,6 +40,17 @@ export class ChatRoomController {
 
     const chatRoom: ChatRoom = await this.repository.createChatRoom(memberIds);
     await this.repository.insertParticipant(chatRoom.roomId, memberIds);
+
+    const invitedUserIds = memberIds.filter((id) => id !== inviterUserId);
+    try {
+      await broadcastInviteToRoom(invitedUserIds, {
+        roomId: chatRoom.roomId,
+        inviterUserId,
+      });
+    } catch (e) {
+      console.error("[ChatRoomController.createRoom] invite broadcast failed", e);
+    }
+
     return chatRoom.roomId;
   }
 }

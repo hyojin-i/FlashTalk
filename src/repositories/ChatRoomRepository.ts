@@ -87,8 +87,7 @@ export class ChatRoomRepository {
     const { error: roomError } = await ChatRoomRepository.db
       .from("ChatRoom")
       .insert({
-        id: roomId,
-        name: "",
+        roomId: roomId,
         createdAt,
       });
 
