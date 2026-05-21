@@ -103,11 +103,54 @@ export class ChatRoomRepository {
     };
   }
 
+  /** 사용자가 참여 중인 채팅방 목록 (최신 생성순) */
+  async findRoomsByUserId(userId: string): Promise<ChatRoom[]> {
+    const { data: participantRows, error: participantError } =
+      await ChatRoomRepository.db
+        .from("RoomParticipant")
+        .select("roomId")
+        .eq("userId", userId);
+
+    if (participantError) {
+      console.error(
+        "[ChatRoomRepository.findRoomsByUserId]",
+        participantError.message
+      );
+      throw new Error(participantError.message);
+    }
+
+    const roomIds = [
+      ...new Set(
+        (participantRows ?? []).map((row) => row.roomId as string).filter(Boolean)
+      ),
+    ];
+    if (roomIds.length === 0) return [];
+
+    const { data: roomRows, error: roomError } = await ChatRoomRepository.db
+      .from("ChatRoom")
+      .select("roomId, createdAt")
+      .in("roomId", roomIds)
+      .order("createdAt", { ascending: false });
+
+    if (roomError) {
+      console.error(
+        "[ChatRoomRepository.findRoomsByUserId]",
+        roomError.message
+      );
+      throw new Error(roomError.message);
+    }
+
+    return (roomRows ?? []).map((row) => ({
+      roomId: row.roomId as string,
+      createdAt: new Date(row.createdAt as string),
+    }));
+  }
+
   /** `roomId`에 속한 `RoomParticipant` 목록을 조회합니다. */
   async findParticipantsByRoomId(roomId: string): Promise<RoomParticipant[]> {
     const { data, error } = await ChatRoomRepository.db
       .from("RoomParticipant")
-      .select("participantId, userId, roomId, joinedAt")
+      .select("ParticipantId, userId, roomId, joinedAt")
       .eq("roomId", roomId);
 
     if (error) {
@@ -119,7 +162,7 @@ export class ChatRoomRepository {
     }
 
     return (data ?? []).map((row) => ({
-      ParticipantId: String(row.participantId ?? ""),
+      ParticipantId: String(row.ParticipantId ?? ""),
       userId: row.userId as string,
       roomId: row.roomId as string,
       joinedAt: new Date(row.joinedAt as string),

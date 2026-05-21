@@ -19,11 +19,10 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const roomId = searchParams.get("roomId")?.trim() ?? "";
+
     if (!roomId) {
-      return NextResponse.json(
-        { ok: false, error: "roomId is required" },
-        { status: 400 }
-      );
+      const rooms = await chatRoomController.getRoomList(myUserId);
+      return NextResponse.json({ ok: true, rooms }, { status: 200 });
     }
 
     const participants = await chatRoomController.getParticipantsInfo(

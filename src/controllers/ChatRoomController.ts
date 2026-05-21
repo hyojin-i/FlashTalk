@@ -1,4 +1,5 @@
 import type { ChatRoom } from "@/entities/ChatRoom";
+import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
 import type { ParticipantsDTO } from "@/entities/Participants";
 import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { ChatRoomRepository } from "@/repositories/ChatRoomRepository";
@@ -55,6 +56,19 @@ export class ChatRoomController {
     }
 
     return chatRoom.roomId;
+  }
+
+  /** 본인이 참여 중인 채팅방 목록과 상대 참가자 정보를 반환합니다. */
+  async getRoomList(myUserId: string): Promise<ChatRoomListItemDTO[]> {
+    const rooms = await this.repository.findRoomsByUserId(myUserId);
+
+    return Promise.all(
+      rooms.map(async (room) => ({
+        roomId: room.roomId,
+        participants: await this.getParticipantsInfo(room.roomId, myUserId),
+        createdAt: room.createdAt.toISOString(),
+      }))
+    );
   }
 
   /**

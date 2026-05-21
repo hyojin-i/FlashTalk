@@ -1,5 +1,7 @@
 "use client";
 
+import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
+import type { ParticipantsDTO } from "@/entities/Participants";
 import type { SessionUserDTO, UserSearchResultDTO } from "@/entities/User";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -64,6 +66,26 @@ function chatTypeLabel(selectedCount: number): string {
   return "그룹 채팅";
 }
 
+/** 사이드바 채팅방 목록 표시용 제목 (본인 제외 참가자 목록 기준) */
+function formatChatRoomListTitle(participants: ParticipantsDTO[]): string {
+  const totalParticipants = participants.length + 1;
+  if (participants.length === 0) return "채팅";
+
+  const names = participants.map((p) => p.name);
+  const othersCount = totalParticipants - 2;
+
+  if (names.length === 1 || othersCount <= 0) {
+    if (names.length >= 2 && othersCount <= 0) {
+      return `${names[0]}, ${names[1]}`;
+    }
+    return names[0];
+  }
+
+  const first = names[0];
+  const second = names[1] ?? names[0];
+  return `${first}, ${second} 외 ${othersCount}명`;
+}
+
 function ChatBubbleIcon() {
   return (
     <svg
@@ -102,6 +124,11 @@ export default function MainView() {
 
   const [createChatPending, setCreateChatPending] = useState(false);
   const [createChatError, setCreateChatError] = useState<string | null>(null);
+
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsError, setRoomsError] = useState<string | null>(null);
 
   const selectedUsers = useMemo(
     () =>
@@ -169,6 +196,54 @@ export default function MainView() {
       }
     };
   }, [router]);
+
+  function loadChatRoomList(): void {
+    const token = readStoredToken();
+    if (!token) return;
+
+    setRoomsLoading(true);
+    setRoomsError(null);
+    void (async () => {
+      try {
+        const res = await fetch("/api/chat", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        let data: {
+          ok?: boolean;
+          rooms?: ChatRoomListItemDTO[];
+          error?: string;
+        } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+
+        if (!res.ok || !data.ok || !Array.isArray(data.rooms)) {
+          setRoomsError(
+            typeof data.error === "string"
+              ? data.error
+              : "채팅방 목록을 불러오지 못했습니다."
+          );
+          setChatRooms([]);
+          return;
+        }
+
+        setChatRooms(data.rooms);
+      } catch {
+        setRoomsError("네트워크 오류가 발생했습니다.");
+        setChatRooms([]);
+      } finally {
+        setRoomsLoading(false);
+      }
+    })();
+  }
+
+  useEffect(() => {
+    if (!currentUser) return;
+    loadChatRoomList();
+  }, [currentUser]);
 
   function toggleUserSelection(user: UserSearchResultDTO): void {
     setCreateChatError(null);
@@ -302,7 +377,10 @@ export default function MainView() {
     void (async () => {
       try {
         const roomId = await requestCreateChatRoom(selectedUserIds);
-        if (roomId) navigateToChatView(roomId);
+        if (roomId) {
+          loadChatRoomList();
+          navigateToChatView(roomId);
+        }
       } catch (e) {
         setCreateChatError(
           e instanceof Error ? e.message : "채팅방 생성에 실패했습니다."
@@ -372,25 +450,95 @@ export default function MainView() {
   const showCreationBox = selectionCount > 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-100 font-sans dark:bg-black">
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <span className="text-xl font-bold tracking-tight text-black dark:text-zinc-50">
-          플래시톡
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            setLogoutError(null);
-            setLogoutModalOpen(true);
-          }}
-          disabled={logoutPending}
-          className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
-        >
-          로그아웃
-        </button>
-      </header>
+    <div className="flex min-h-screen bg-zinc-100 font-sans dark:bg-black">
+      <aside
+        className={`flex min-h-screen shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200 ease-in-out dark:border-zinc-800 dark:bg-zinc-950 ${
+          sidebarOpen ? "w-72" : "w-0 overflow-hidden border-r-0"
+        }`}
+        aria-hidden={!sidebarOpen}
+      >
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            채팅방
+          </span>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            닫기
+          </button>
+        </div>
+        <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+          {roomsLoading && chatRooms.length === 0 && (
+            <li className="px-3 py-6 text-center text-sm text-zinc-500">
+              불러오는 중…
+            </li>
+          )}
+          {roomsError && (
+            <li className="px-3 py-2 text-sm text-red-600 dark:text-red-400">
+              {roomsError}
+            </li>
+          )}
+          {!roomsLoading && !roomsError && chatRooms.length === 0 && (
+            <li className="px-3 py-6 text-center text-sm text-zinc-500">
+              참여 중인 채팅방이 없습니다.
+            </li>
+          )}
+          {chatRooms.map((room) => {
+            const listTitle = formatChatRoomListTitle(room.participants);
+            return (
+              <li key={room.roomId}>
+                <button
+                  type="button"
+                  onClick={() => navigateToChatView(room.roomId)}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800 dark:bg-violet-900 dark:text-violet-200">
+                    {nameInitial(listTitle)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                      {listTitle}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </aside>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 sm:px-6 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex items-center gap-3">
+            {!sidebarOpen && (
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+              >
+                열기
+              </button>
+            )}
+            <span className="text-xl font-bold tracking-tight text-black dark:text-zinc-50">
+              플래시톡
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setLogoutError(null);
+              setLogoutModalOpen(true);
+            }}
+            disabled={logoutPending}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+          >
+            로그아웃
+          </button>
+        </header>
+
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -580,7 +728,8 @@ export default function MainView() {
             })}
           </ul>
         </section>
-      </main>
+        </main>
+      </div>
 
       {logoutModalOpen && (
         <div
