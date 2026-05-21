@@ -1,6 +1,7 @@
 "use client";
 
 import type { ParticipantsDTO } from "@/entities/Participants";
+import type { SessionUserDTO } from "@/entities/User";
 import {
   INVITE_TO_ROOM_EVENT,
   type InviteToRoomPayload,
@@ -11,6 +12,15 @@ import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
+
+function formatTodayDateLabel(): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(new Date());
+}
 
 function formatParticipantHeaderTitle(participants: ParticipantsDTO[]): string {
   const totalParticipants = participants.length + 1;
@@ -31,17 +41,27 @@ function formatParticipantHeaderTitle(participants: ParticipantsDTO[]): string {
   return `${first}, ${second} 외 ${othersCount}명`;
 }
 
-function readStoredUserId(): string | null {
+function readStoredUser(): SessionUserDTO | null {
   try {
     const raw = sessionStorage.getItem(CLIENT_USER_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return null;
-    const userId = (parsed as Record<string, unknown>).userId;
-    return typeof userId === "string" && userId.length > 0 ? userId : null;
+    const o = parsed as Record<string, unknown>;
+    if (typeof o.userId !== "string" || !o.userId) return null;
+    return parsed as SessionUserDTO;
   } catch {
     return null;
   }
+}
+
+function readStoredUserId(): string | null {
+  return readStoredUser()?.userId ?? null;
+}
+
+function nameInitial(name: string): string {
+  const trimmed = name.trim();
+  return trimmed ? trimmed.charAt(0) : "?";
 }
 
 function readStoredToken(): string | null {
@@ -66,10 +86,19 @@ export default function ChatView({
   const [participantsError, setParticipantsError] = useState<string | null>(
     null
   );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<SessionUserDTO | null>(null);
+
+  const totalParticipantCount = participants.length + 1;
 
   const headerTitle = formatParticipantHeaderTitle(participants);
   const headerSubtitle =
     participants.length === 1 ? participants[0].studentId : null;
+
+  useEffect(() => {
+    const user = readStoredUser();
+    if (user) setCurrentUser(user);
+  }, []);
 
   useEffect(() => {
     const token = readStoredToken();
@@ -173,32 +202,61 @@ export default function ChatView({
   }, [router]);
 
   return (
-    <div className="flex h-screen flex-col bg-[#fdfdfd] font-sans">
-      {/* Header */}
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-100 bg-white px-6">
-        <div className="flex flex-col min-w-0">
-          <span className="truncate text-lg font-bold text-black">
-            {participantsLoading ? "불러오는 중…" : headerTitle}
-          </span>
-          {participantsError ? (
-            <span className="text-xs text-red-500">{participantsError}</span>
-          ) : headerSubtitle ? (
-            <span className="text-xs text-zinc-500">{headerSubtitle}</span>
-          ) : null}
-        </div>
-        <button type="button" className="text-zinc-600 hover:text-black">
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </header>
+    <div className="relative flex h-screen flex-col bg-[#fdfdfd] font-sans">
+      {settingsOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/40"
+          aria-label="대화방 설정 닫기"
+          onClick={() => setSettingsOpen(false)}
+        />
+      )}
 
-      {/* Body */}
-      <main className="flex-1 overflow-y-auto bg-[#f8f9fa] p-4 flex flex-col gap-4">
+      <div
+        className={`flex min-h-0 flex-1 flex-col transition-[filter] ${
+          settingsOpen ? "pointer-events-none brightness-[0.65]" : ""
+        }`}
+      >
+        {/* Header */}
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-100 bg-white px-6">
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-lg font-bold text-black">
+              {participantsLoading ? "불러오는 중…" : headerTitle}
+            </span>
+            {participantsError ? (
+              <span className="text-xs text-red-500">{participantsError}</span>
+            ) : headerSubtitle ? (
+              <span className="text-xs text-zinc-500">{headerSubtitle}</span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="text-zinc-600 hover:text-black"
+            aria-label="대화방 설정 열기"
+          >
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+        </header>
+
+        {/* Body */}
+        <main className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f8f9fa] p-4">
         {/* Date separator */}
         <div className="flex justify-center my-4">
           <span className="rounded-full bg-white px-4 py-1.5 text-xs text-zinc-500 shadow-sm">
-            2026년 4월 19일 일요일
+            {formatTodayDateLabel()}
           </span>
         </div>
 
@@ -245,10 +303,10 @@ export default function ChatView({
           </div>
           <span className="text-[11px] text-zinc-400 mt-1">오후 4:03</span>
         </div>
-      </main>
+        </main>
 
-      {/* Footer */}
-      <footer className="shrink-0 bg-white p-4 flex items-center gap-3">
+        {/* Footer */}
+        <footer className="flex shrink-0 items-center gap-3 bg-white p-4">
         <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black">
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -266,7 +324,135 @@ export default function ChatView({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
         </button>
-      </footer>
+        </footer>
+      </div>
+
+      {/* Chat room settings panel */}
+      <aside
+        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-white shadow-2xl transition-transform duration-200 ease-out ${
+          settingsOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+        aria-hidden={!settingsOpen}
+      >
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-100 px-5">
+          <h2 className="text-lg font-bold text-zinc-900">대화방 설정</h2>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+            aria-label="닫기"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <svg
+              className="h-5 w-5 text-zinc-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+            <span>
+              현재 대화 참여자 ({totalParticipantCount}명)
+            </span>
+          </div>
+
+          <ul className="flex flex-col gap-3">
+            <li className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
+                {currentUser ? nameInitial(currentUser.name) : "나"}
+              </span>
+              <span className="text-sm font-medium text-zinc-900">나</span>
+            </li>
+            {participants.map((p) => (
+              <li key={p.studentId} className="flex items-center gap-3">
+                <span className="relative shrink-0">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
+                    {nameInitial(p.name)}
+                  </span>
+                  <span
+                    className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500"
+                    aria-hidden
+                  />
+                </span>
+                <span className="text-sm text-zinc-800">
+                  {p.name}{" "}
+                  <span className="text-zinc-500">({p.studentId})</span>
+                </span>
+              </li>
+            ))}
+            {participantsLoading && participants.length === 0 && (
+              <li className="text-sm text-zinc-500">불러오는 중…</li>
+            )}
+          </ul>
+
+          <div className="my-6 border-t border-zinc-100" />
+
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+              />
+            </svg>
+            새로운 사용자 초대하기
+          </button>
+
+          <button
+            type="button"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            대화방 나가기
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }
