@@ -29,6 +29,29 @@ export class UserRepository {
     return data as User;
   }
 
+  /** `userId` 목록으로 `User` 행을 조회합니다. */
+  async getUserInfo(userIds: string[]): Promise<User[]> {
+    if (userIds.length === 0) return [];
+
+    const { data, error } = await UserRepository.db
+      .from("User")
+      .select("userId, studentId, name, universityName, role")
+      .in("userId", userIds);
+
+    if (error) {
+      console.error("[UserRepository.getUserInfo]", error.message);
+      throw new Error(error.message);
+    }
+
+    const users = (data ?? []) as User[];
+    const order = new Map(userIds.map((id, index) => [id, index]));
+    return users.sort(
+      (a, b) =>
+        (order.get(a.userId) ?? Number.MAX_SAFE_INTEGER) -
+        (order.get(b.userId) ?? Number.MAX_SAFE_INTEGER)
+    );
+  }
+
   async checkUserExists(
     studentId: string,
     universityName: string

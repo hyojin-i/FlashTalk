@@ -7,6 +7,40 @@ import { getUserIdFromRequest } from "@/lib/auth-request";
 
 const chatRoomController = new ChatRoomController();
 
+export async function GET(request: Request) {
+  try {
+    const myUserId = await getUserIdFromRequest(request);
+    if (!myUserId) {
+      return NextResponse.json(
+        { ok: false, error: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const roomId = searchParams.get("roomId")?.trim() ?? "";
+    if (!roomId) {
+      return NextResponse.json(
+        { ok: false, error: "roomId is required" },
+        { status: 400 }
+      );
+    }
+
+    const participants = await chatRoomController.getParticipantsInfo(
+      roomId,
+      myUserId
+    );
+
+    return NextResponse.json({ ok: true, participants }, { status: 200 });
+  } catch (e) {
+    console.error("[GET /api/chat]", e);
+    return NextResponse.json(
+      { ok: false, error: "Failed to load chat room participants" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const hostUserId = await getUserIdFromRequest(request);

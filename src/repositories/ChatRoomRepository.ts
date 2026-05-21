@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ChatRoom } from "@/entities/ChatRoom";
+import type { RoomParticipant } from "@/entities/RoomParticipant";
 import { DBConnectionManager } from "@/lib/DBConnectionManager";
 
 export class ChatRoomRepository {
@@ -100,6 +101,29 @@ export class ChatRoomRepository {
       roomId,
       createdAt: new Date(createdAt),
     };
+  }
+
+  /** `roomId`에 속한 `RoomParticipant` 목록을 조회합니다. */
+  async findParticipantsByRoomId(roomId: string): Promise<RoomParticipant[]> {
+    const { data, error } = await ChatRoomRepository.db
+      .from("RoomParticipant")
+      .select("participantId, userId, roomId, joinedAt")
+      .eq("roomId", roomId);
+
+    if (error) {
+      console.error(
+        "[ChatRoomRepository.findParticipantsByRoomId]",
+        error.message
+      );
+      throw new Error(error.message);
+    }
+
+    return (data ?? []).map((row) => ({
+      ParticipantId: String(row.participantId ?? ""),
+      userId: row.userId as string,
+      roomId: row.roomId as string,
+      joinedAt: new Date(row.joinedAt as string),
+    }));
   }
 
   /** `RoomParticipant` 테이블에 참가자 목록을 추가합니다. */

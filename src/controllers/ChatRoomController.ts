@@ -1,6 +1,8 @@
 import type { ChatRoom } from "@/entities/ChatRoom";
+import type { ParticipantsDTO } from "@/entities/Participants";
 import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { ChatRoomRepository } from "@/repositories/ChatRoomRepository";
+import { UserRepository } from "@/repositories/UserRepository";
 
 export class ChatRoomParticipantRequiredError extends Error {
   readonly name = "ChatRoomParticipantRequiredError";
@@ -11,7 +13,8 @@ export class ChatRoomParticipantRequiredError extends Error {
 
 export class ChatRoomController {
   constructor(
-    private readonly repository: ChatRoomRepository = new ChatRoomRepository()
+    private readonly repository: ChatRoomRepository = new ChatRoomRepository(),
+    private readonly userRepository: UserRepository = new UserRepository()
   ) {}
 
   /**
@@ -52,5 +55,32 @@ export class ChatRoomController {
     }
 
     return chatRoom.roomId;
+  }
+
+  /**
+   * 채팅방 참가자 중 본인을 제외한 상대 정보를 반환합니다.
+   * 상대가 없으면 DB 조회 없이 빈 배열을 반환합니다.
+   */
+  async getParticipantsInfo(
+    roomId: string,
+    myUserId: string
+  ): Promise<ParticipantsDTO[]> {
+    const roomParticipants =
+      await this.repository.findParticipantsByRoomId(roomId);
+
+    const targetUserIds = roomParticipants
+      .map((p) => p.userId)
+      .filter((id) => id !== myUserId);
+
+    if (targetUserIds.length === 0) {
+      return [];
+    }
+
+    const users = await this.userRepository.getUserInfo(targetUserIds);
+
+    return users.map((user) => ({
+      studentId: user.studentId,
+      name: user.name?.trim() || user.studentId,
+    }));
   }
 }
