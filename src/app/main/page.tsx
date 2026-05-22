@@ -3,6 +3,12 @@
 import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
 import type { ParticipantsDTO } from "@/entities/Participants";
 import type { SessionUserDTO, UserSearchResultDTO } from "@/entities/User";
+import {
+  createUserPresenceChannel,
+  INVITE_TO_ROOM_EVENT,
+  type InviteToRoomPayload,
+  normalizeUserId,
+} from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -10,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const PRESENCE_HEARTBEAT_MS = 60 * 1000;
-const USER_PRESENCE_CHANNEL = "user_presence_channel";
+const INVITE_TOAST_MS = 10 * 1000;
 
 const inputClassName =
   "h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50";
@@ -108,6 +114,7 @@ function ChatBubbleIcon() {
 export default function MainView() {
   const router = useRouter();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const handleInviteBroadcastRef = useRef<(payload: unknown) => void>(() => {});
 
   const [currentUser, setCurrentUser] = useState<SessionUserDTO | null>(null);
 
@@ -129,6 +136,11 @@ export default function MainView() {
   const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [roomsError, setRoomsError] = useState<string | null>(null);
+
+  const [inviteToast, setInviteToast] = useState<{
+    roomId: string;
+    inviterName: string;
+  } | null>(null);
 
   const selectedUsers = useMemo(
     () =>
@@ -161,24 +173,48 @@ export default function MainView() {
     const supabase = getBrowserSupabaseClient();
 
     void (async () => {
-      await supabase.realtime.setAuth(token);
+      // Public channel (no `private: true`): subscribe with the anon key.
+      // Calling setAuth() with a JWT that does not match the project's signing key
+      // causes JwtSignatureError on subscribe.
       if (cancelled) return;
 
-      const channel = supabase.channel(USER_PRESENCE_CHANNEL);
+      const userId = normalizeUserId(user.userId);
+      const channel = createUserPresenceChannel(supabase, userId);
       channelRef.current = channel;
 
-      channel.on(
-        "broadcast",
-        { event: "INVITE_TO_ROOM" },
-        (payload) => {
-          console.info("[INVITE_TO_ROOM]", payload);
-        }
-      );
-
-      channel.subscribe(async (status) => {
-        if (cancelled || status !== "SUBSCRIBED") return;
-        await channel.track({ isOnline: true, userId: user.userId });
-      });
+      channel
+        .on(
+          "broadcast",
+          { event: INVITE_TO_ROOM_EVENT },
+          ({ payload }) => {
+            handleInviteBroadcastRef.current(payload);
+          }
+        )
+        .subscribe(async (status, err) => {
+          if (cancelled) return;
+          if (status === "CHANNEL_ERROR") {
+            const message =
+              err instanceof Error ? err.message : String(err ?? "");
+            console.error("[MainView] realtime channel error", err);
+            if (
+              message.includes("JwtSignature") ||
+              message.includes("JWT")
+            ) {
+              try {
+                sessionStorage.removeItem(CLIENT_JWT_KEY);
+                sessionStorage.removeItem(CLIENT_USER_KEY);
+              } catch {
+                /* ignore */
+              }
+              router.replace(
+                "/login?error=session_expired"
+              );
+            }
+            return;
+          }
+          if (status !== "SUBSCRIBED") return;
+          await channel.track({ isOnline: true, userId });
+        });
 
       heartbeatId = window.setInterval(() => {
         void postPresenceHeartbeat(token);
@@ -244,6 +280,27 @@ export default function MainView() {
     if (!currentUser) return;
     loadChatRoomList();
   }, [currentUser]);
+
+  handleInviteBroadcastRef.current = (rawPayload: unknown) => {
+    const invite = rawPayload as InviteToRoomPayload;
+    if (typeof invite?.roomId !== "string") return;
+
+    const inviterName =
+      typeof invite.inviterName === "string" && invite.inviterName.trim()
+        ? invite.inviterName.trim()
+        : "알 수 없음";
+
+    loadChatRoomList();
+    setInviteToast({ roomId: invite.roomId, inviterName });
+  };
+
+  useEffect(() => {
+    if (!inviteToast) return;
+    const timeoutId = window.setTimeout(() => {
+      setInviteToast(null);
+    }, INVITE_TOAST_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [inviteToast]);
 
   function toggleUserSelection(user: UserSearchResultDTO): void {
     setCreateChatError(null);
@@ -730,6 +787,39 @@ export default function MainView() {
         </section>
         </main>
       </div>
+
+      {inviteToast && (
+        <div
+          className="fixed bottom-6 right-6 z-50 w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-sm text-zinc-800 dark:text-zinc-200">
+            <span className="font-semibold">{inviteToast.inviterName}</span>
+            님이 채팅방에 초대했습니다. 이동하시겠습니까?
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setInviteToast(null)}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              거절
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { roomId } = inviteToast;
+                setInviteToast(null);
+                navigateToChatView(roomId);
+              }}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              수락
+            </button>
+          </div>
+        </div>
+      )}
 
       {logoutModalOpen && (
         <div

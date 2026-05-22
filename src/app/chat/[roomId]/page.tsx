@@ -2,16 +2,9 @@
 
 import type { ParticipantsDTO } from "@/entities/Participants";
 import type { SessionUserDTO } from "@/entities/User";
-import {
-  INVITE_TO_ROOM_EVENT,
-  type InviteToRoomPayload,
-  userPresenceChannelName,
-} from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
-import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 function formatTodayDateLabel(): string {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -55,10 +48,6 @@ function readStoredUser(): SessionUserDTO | null {
   }
 }
 
-function readStoredUserId(): string | null {
-  return readStoredUser()?.userId ?? null;
-}
-
 function nameInitial(name: string): string {
   const trimmed = name.trim();
   return trimmed ? trimmed.charAt(0) : "?";
@@ -80,7 +69,6 @@ export default function ChatView({
 }) {
   const { roomId } = use(params);
   const router = useRouter();
-  const channelRef = useRef<RealtimeChannel | null>(null);
   const [participants, setParticipants] = useState<ParticipantsDTO[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(true);
   const [participantsError, setParticipantsError] = useState<string | null>(
@@ -158,48 +146,6 @@ export default function ChatView({
       cancelled = true;
     };
   }, [roomId, router]);
-
-  useEffect(() => {
-    const token = readStoredToken();
-    const userId = readStoredUserId();
-    if (!token || !userId) {
-      router.replace("/login");
-      return;
-    }
-
-    let cancelled = false;
-    const supabase = getBrowserSupabaseClient();
-
-    void (async () => {
-      await supabase.realtime.setAuth(token);
-      if (cancelled) return;
-
-      const channel = supabase.channel(userPresenceChannelName(userId));
-      channelRef.current = channel;
-
-      channel.on(
-        "broadcast",
-        { event: INVITE_TO_ROOM_EVENT },
-        ({ payload }) => {
-          const invite = payload as InviteToRoomPayload;
-          if (typeof invite?.roomId === "string") {
-            router.push(`/chat/${invite.roomId}`);
-          }
-        }
-      );
-
-      channel.subscribe();
-    })();
-
-    return () => {
-      cancelled = true;
-      const ch = channelRef.current;
-      if (ch) {
-        void supabase.removeChannel(ch);
-        channelRef.current = null;
-      }
-    };
-  }, [router]);
 
   return (
     <div className="relative flex h-screen flex-col bg-[#fdfdfd] font-sans">

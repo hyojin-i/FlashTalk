@@ -24,7 +24,7 @@ export class UserNotFoundError extends Error {
 export class InvalidLoginPasswordError extends Error {
   readonly name = "InvalidLoginPasswordError";
   constructor() {
-    super("Invalid password");
+    super("잘못된 비밀번호입니다.");
   }
 }
 

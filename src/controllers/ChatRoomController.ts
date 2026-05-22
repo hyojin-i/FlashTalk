@@ -1,6 +1,7 @@
 import type { ChatRoom } from "@/entities/ChatRoom";
 import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
 import type { ParticipantsDTO } from "@/entities/Participants";
+import { normalizeUserId } from "@/lib/presence-channel";
 import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { ChatRoomRepository } from "@/repositories/ChatRoomRepository";
 import { UserRepository } from "@/repositories/UserRepository";
@@ -45,11 +46,18 @@ export class ChatRoomController {
     const chatRoom: ChatRoom = await this.repository.createChatRoom(memberIds);
     await this.repository.insertParticipant(chatRoom.roomId, memberIds);
 
-    const invitedUserIds = memberIds.filter((id) => id !== inviterUserId);
+    const inviterId = normalizeUserId(inviterUserId);
+    const invitedUserIds = memberIds.filter((id) => id !== inviterId);
+    const inviterUsers = await this.userRepository.getUserInfo([inviterId]);
+    const inviter = inviterUsers[0];
+    const inviterName =
+      inviter?.name?.trim() || inviter?.studentId?.trim() || "알 수 없음";
+
     try {
       await broadcastInviteToRoom(invitedUserIds, {
         roomId: chatRoom.roomId,
-        inviterUserId,
+        inviterUserId: inviterId,
+        inviterName,
       });
     } catch (e) {
       console.error("[ChatRoomController.createRoom] invite broadcast failed", e);
