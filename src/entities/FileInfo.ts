@@ -6,5 +6,4 @@ export interface FileInfo {
     fileType: string;
     userId: string;
     uploadedAt: Date;
-    downloadedAt?: Date;
 }
