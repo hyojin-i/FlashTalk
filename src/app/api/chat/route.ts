@@ -4,6 +4,7 @@ import {
   ChatRoomParticipantRequiredError,
 } from "@/controllers/ChatRoomController";
 import { getUserIdFromRequest } from "@/lib/auth-request";
+import { messageToPayload } from "@/lib/message-payload";
 
 const chatRoomController = new ChatRoomController();
 
@@ -51,6 +52,39 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Record<string, unknown>;
+
+    const sendRoomId =
+      typeof body.roomId === "string" ? body.roomId.trim() : "";
+    const sendType = typeof body.type === "string" ? body.type.trim() : "";
+    const sendContent =
+      typeof body.content === "string" ? body.content : "";
+
+    if (sendRoomId && sendType) {
+      try {
+        const message = await chatRoomController.sendMessage(
+          sendRoomId,
+          hostUserId,
+          sendType,
+          sendContent
+        );
+        return NextResponse.json(
+          {
+            ok: true,
+            message: {
+              ...messageToPayload(message),
+              roomId: sendRoomId,
+            },
+          },
+          { status: 200 }
+        );
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Failed to send message";
+        const status = message.includes("required") ? 400 : 500;
+        return NextResponse.json({ ok: false, error: message }, { status });
+      }
+    }
+
     const rawIds = body.participantUserIds ?? body.selectedUserIds;
     if (!Array.isArray(rawIds)) {
       return NextResponse.json(

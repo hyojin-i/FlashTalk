@@ -2,9 +2,12 @@
 
 import type { ParticipantsDTO } from "@/entities/Participants";
 import type { SessionUserDTO } from "@/entities/User";
+import { readRoomMessages } from "@/lib/chat-room-messages-storage";
+import type { ChatMessagePayload } from "@/lib/message-payload";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 
 function formatTodayDateLabel(): string {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -13,6 +16,14 @@ function formatTodayDateLabel(): string {
     day: "numeric",
     weekday: "long",
   }).format(new Date());
+}
+
+function formatMessageTime(iso: string): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
 }
 
 function formatParticipantHeaderTitle(participants: ParticipantsDTO[]): string {
@@ -62,6 +73,32 @@ function readStoredToken(): string | null {
   }
 }
 
+function resolveSenderName(
+  senderId: string,
+  currentUser: SessionUserDTO | null,
+  participants: ParticipantsDTO[]
+): string {
+  if (currentUser && senderId === currentUser.userId) {
+    return currentUser.name?.trim() || "나";
+  }
+  const participant = participants.find((p) => p.userId === senderId);
+  if (participant) return participant.name;
+  return "알 수 없음";
+}
+
+function mergeMessages(
+  stored: ChatMessagePayload[],
+  live: ChatMessagePayload[]
+): ChatMessagePayload[] {
+  const byId = new Map<string, ChatMessagePayload>();
+  for (const m of [...stored, ...live]) {
+    byId.set(m.id, m);
+  }
+  return [...byId.values()].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt)
+  );
+}
+
 export default function ChatView({
   params,
 }: {
@@ -69,6 +106,9 @@ export default function ChatView({
 }) {
   const { roomId } = use(params);
   const router = useRouter();
+  const { roomMessages, getRoomMessages, ensureRoomChannel, receiveMessage } =
+    useGlobalSocket();
+
   const [participants, setParticipants] = useState<ParticipantsDTO[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(true);
   const [participantsError, setParticipantsError] = useState<string | null>(
@@ -77,16 +117,90 @@ export default function ChatView({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<SessionUserDTO | null>(null);
 
+  const [transientMessageList, setTransientMessageList] = useState<
+    ChatMessagePayload[]
+  >([]);
+  const [currentMessage, setCurrentMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+
   const totalParticipantCount = participants.length + 1;
 
   const headerTitle = formatParticipantHeaderTitle(participants);
   const headerSubtitle =
     participants.length === 1 ? participants[0].studentId : null;
 
+  const requestSendMessage = useCallback(async (): Promise<void> => {
+    const trimmed = currentMessage.trim();
+    if (!trimmed || isLoading) return;
+
+    const token = readStoredToken();
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    setIsLoading(true);
+    setSendError(null);
+    setCurrentMessage("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          roomId,
+          type: "text",
+          content: trimmed,
+        }),
+      });
+
+      let data: { ok?: boolean; message?: ChatMessagePayload; error?: string } =
+        {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+
+      if (!res.ok) {
+        setSendError(
+          typeof data.error === "string"
+            ? data.error
+            : "메시지 전송에 실패했습니다."
+        );
+        setCurrentMessage(trimmed);
+        return;
+      }
+
+      if (data.message) {
+        receiveMessage(roomId, data.message);
+      }
+    } catch {
+      setSendError("네트워크 오류가 발생했습니다.");
+      setCurrentMessage(trimmed);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentMessage, isLoading, roomId, router, receiveMessage]);
+
   useEffect(() => {
     const user = readStoredUser();
     if (user) setCurrentUser(user);
   }, []);
+
+  useEffect(() => {
+    void ensureRoomChannel(roomId);
+  }, [roomId, ensureRoomChannel]);
+
+  useEffect(() => {
+    const stored = readRoomMessages(roomId);
+    const live = getRoomMessages(roomId);
+    setTransientMessageList(mergeMessages(stored, live));
+  }, [roomId, roomMessages, getRoomMessages]);
 
   useEffect(() => {
     const token = readStoredToken();
@@ -147,6 +261,11 @@ export default function ChatView({
     };
   }, [roomId, router]);
 
+  function handleSubmit(e: React.FormEvent): void {
+    e.preventDefault();
+    void requestSendMessage();
+  }
+
   return (
     <div className="relative flex h-screen flex-col bg-[#fdfdfd] font-sans">
       {settingsOpen && (
@@ -199,77 +318,115 @@ export default function ChatView({
 
         {/* Body */}
         <main className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f8f9fa] p-4">
-        {/* Date separator */}
-        <div className="flex justify-center my-4">
-          <span className="rounded-full bg-white px-4 py-1.5 text-xs text-zinc-500 shadow-sm">
-            {formatTodayDateLabel()}
-          </span>
-        </div>
-
-        {/* My message */}
-        <div className="flex flex-col items-end gap-1">
-          <div className="rounded-2xl rounded-tr-none px-4 py-2.5 text-sm text-white" style={{ backgroundColor: '#d070fb' }}>
-            안녕하세요! 방금 메인 화면에서 보고 대화 걸었습니다.
+          <div className="my-4 flex justify-center">
+            <span className="rounded-full bg-white px-4 py-1.5 text-xs text-zinc-500 shadow-sm">
+              {formatTodayDateLabel()}
+            </span>
           </div>
-          <span className="text-[11px] text-zinc-400">오후 3:58</span>
-        </div>
 
-        {/* Other's message (Text) */}
-        <div className="flex flex-col items-start gap-1 mt-2">
-          <span className="text-xs font-medium text-zinc-600 ml-1">김지훈</span>
-          <div className="flex items-end gap-2">
-            <div className="rounded-2xl rounded-tl-none bg-white px-4 py-2.5 text-sm text-zinc-800 shadow-sm">
-              아, 네! 반갑습니다. 요청하신 자료는 파일로 보내드릴게요.
-            </div>
-            <span className="text-[11px] text-zinc-400">오후 4:00</span>
-          </div>
-        </div>
+          {transientMessageList.map((msg) => {
+            if (msg.type !== "text") return null;
 
-        {/* Other's message (File) */}
-        <div className="flex flex-col items-start gap-1 mt-2">
-          <span className="text-xs font-medium text-zinc-600 ml-1">김지훈</span>
-          <div className="flex items-end gap-2">
-            <div className="rounded-2xl rounded-tl-none bg-white p-4 shadow-sm min-w-[200px]">
-              <div className="flex items-center gap-2 mb-3">
-                <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-                <span className="text-sm font-medium text-zinc-800">프로젝트_보안_설계도.pdf</span>
+            const isMine =
+              currentUser != null && msg.senderId === currentUser.userId;
+            const senderName = resolveSenderName(
+              msg.senderId,
+              currentUser,
+              participants
+            );
+            const timeLabel = formatMessageTime(msg.createdAt);
+
+            if (isMine) {
+              return (
+                <div key={msg.id} className="flex flex-col items-end gap-1">
+                  <div
+                    className="rounded-2xl rounded-tr-none px-4 py-2.5 text-sm text-white"
+                    style={{ backgroundColor: "#d070fb" }}
+                  >
+                    {msg.content}
+                  </div>
+                  <span className="text-[11px] text-zinc-400">{timeLabel}</span>
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={msg.id}
+                className="mt-2 flex flex-col items-start gap-1"
+              >
+                <span className="ml-1 text-xs font-medium text-zinc-600">
+                  {senderName}
+                </span>
+                <div className="flex items-end gap-2">
+                  <div className="rounded-2xl rounded-tl-none bg-white px-4 py-2.5 text-sm text-zinc-800 shadow-sm">
+                    {msg.content}
+                  </div>
+                  <span className="text-[11px] text-zinc-400">{timeLabel}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-xs text-zinc-500">
-                <span>2.4MB</span>
-                <button type="button" className="flex items-center gap-1 rounded bg-zinc-100 px-2 py-1 hover:bg-zinc-200">
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  <span>저장</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <span className="text-[11px] text-zinc-400 mt-1">오후 4:03</span>
-        </div>
+            );
+          })}
         </main>
 
         {/* Footer */}
-        <footer className="flex shrink-0 items-center gap-3 bg-white p-4">
-        <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black">
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-        <div className="flex flex-1 items-center rounded-xl bg-zinc-100 px-4 py-2.5">
-          <input
-            type="text"
-            placeholder="네, 확인했습니다."
-            className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
-          />
-        </div>
-        <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white hover:bg-zinc-800">
-          <svg className="h-4 w-4 translate-x-[-1px] translate-y-[1px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
-        </button>
+        <footer className="flex shrink-0 flex-col gap-1 bg-white p-4">
+          {sendError && (
+            <p className="text-center text-xs text-red-500">{sendError}</p>
+          )}
+          <form
+            className="flex items-center gap-3"
+            onSubmit={handleSubmit}
+          >
+            <button
+              type="button"
+              className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black"
+              disabled={isLoading}
+            >
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </button>
+            <div className="flex flex-1 items-center rounded-xl bg-zinc-100 px-4 py-2.5">
+              <input
+                type="text"
+                value={currentMessage}
+                onChange={(e) => setCurrentMessage(e.target.value)}
+                placeholder="메시지를 입력하세요"
+                disabled={isLoading}
+                className="w-full bg-transparent text-sm text-black outline-none placeholder:text-zinc-500 disabled:opacity-60"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isLoading || !currentMessage.trim()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white hover:bg-zinc-800 disabled:opacity-50"
+            >
+              <svg
+                className="h-4 w-4 translate-x-[-1px] translate-y-[1px]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            </button>
+          </form>
         </footer>
       </div>
 
@@ -320,9 +477,7 @@ export default function ChatView({
                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
               />
             </svg>
-            <span>
-              현재 대화 참여자 ({totalParticipantCount}명)
-            </span>
+            <span>현재 대화 참여자 ({totalParticipantCount}명)</span>
           </div>
 
           <ul className="flex flex-col gap-3">
@@ -333,7 +488,7 @@ export default function ChatView({
               <span className="text-sm font-medium text-zinc-900">나</span>
             </li>
             {participants.map((p) => (
-              <li key={p.studentId} className="flex items-center gap-3">
+              <li key={p.userId} className="flex items-center gap-3">
                 <span className="relative shrink-0">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
                     {nameInitial(p.name)}
@@ -374,7 +529,7 @@ export default function ChatView({
                 d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
               />
             </svg>
-            새로운 사용자 초대하기
+            친구 초대하기
           </button>
 
           <button
@@ -386,7 +541,6 @@ export default function ChatView({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
-              aria-hidden
             >
               <path
                 strokeLinecap="round"
@@ -395,7 +549,7 @@ export default function ChatView({
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
               />
             </svg>
-            대화방 나가기
+            Leave Room
           </button>
         </div>
       </aside>

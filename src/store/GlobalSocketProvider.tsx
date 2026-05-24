@@ -1,0 +1,381 @@
+"use client";
+
+import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
+import type { SessionUserDTO } from "@/entities/User";
+import {
+  CHAT_MESSAGE_EVENT,
+  createChatRoomChannel,
+} from "@/lib/chat-room-channel";
+import { appendRoomMessage } from "@/lib/chat-room-messages-storage";
+import type { ChatMessagePayload } from "@/lib/message-payload";
+import {
+  isChatMessagePayload,
+  unwrapBroadcastPayload,
+} from "@/lib/message-payload";
+import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { usePathname } from "next/navigation";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+const SUBSCRIBE_TIMEOUT_MS = 10_000;
+
+export type LatestMessagePreview = {
+  roomId: string;
+  content: string;
+  createdAt: string;
+  senderId: string;
+};
+
+type GlobalSocketContextValue = {
+  roomMessages: Record<string, ChatMessagePayload[]>;
+  latestMessages: Record<string, LatestMessagePreview>;
+  unreadCounts: Record<string, number>;
+  activeRoomId: string | null;
+  refreshRooms: () => void;
+  ensureRoomChannel: (roomId: string) => Promise<void>;
+  receiveMessage: (roomId: string, raw: unknown) => void;
+  getRoomMessages: (roomId: string) => ChatMessagePayload[];
+};
+
+const GlobalSocketContext = createContext<GlobalSocketContextValue | null>(
+  null
+);
+
+function readStoredUser(): SessionUserDTO | null {
+  try {
+    const raw = sessionStorage.getItem(CLIENT_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const o = parsed as Record<string, unknown>;
+    if (typeof o.userId !== "string" || !o.userId) return null;
+    return parsed as SessionUserDTO;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredToken(): string | null {
+  try {
+    const token = sessionStorage.getItem(CLIENT_JWT_KEY);
+    return token && token.length > 0 ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+function toLatestPreview(
+  roomId: string,
+  message: ChatMessagePayload
+): LatestMessagePreview {
+  return {
+    roomId,
+    content:
+      message.type === "text"
+        ? (message.content ?? "")
+        : (message.fileName ?? "파일"),
+    createdAt: message.createdAt,
+    senderId: message.senderId,
+  };
+}
+
+export function useGlobalSocket(): GlobalSocketContextValue {
+  const ctx = useContext(GlobalSocketContext);
+  if (!ctx) {
+    throw new Error("useGlobalSocket must be used within GlobalSocketProvider");
+  }
+  return ctx;
+}
+
+export function GlobalSocketProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const activeRoomId = useMemo(() => {
+    const match = pathname?.match(/^\/chat\/([^/]+)/);
+    return match?.[1] ?? null;
+  }, [pathname]);
+
+  const [roomMessages, setRoomMessages] = useState<
+    Record<string, ChatMessagePayload[]>
+  >({});
+  const [latestMessages, setLatestMessages] = useState<
+    Record<string, LatestMessagePreview>
+  >({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
+  const channelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
+  const subscribedRoomIdsRef = useRef<string[]>([]);
+  const subscribingRef = useRef<Map<string, Promise<void>>>(new Map());
+  const currentUserIdRef = useRef<string | null>(null);
+  const activeRoomIdRef = useRef<string | null>(null);
+
+  activeRoomIdRef.current = activeRoomId;
+
+  const ingestMessage = useCallback((roomId: string, raw: unknown) => {
+    const unwrapped = unwrapBroadcastPayload(raw);
+    if (!isChatMessagePayload(unwrapped)) return;
+
+    const message: ChatMessagePayload = {
+      ...unwrapped,
+      roomId: unwrapped.roomId ?? roomId,
+    };
+    const normalizedRoomId = (message.roomId ?? roomId).trim();
+
+    appendRoomMessage(normalizedRoomId, message);
+
+    setRoomMessages((prev) => {
+      const list = prev[normalizedRoomId] ?? [];
+      if (list.some((m) => m.id === message.id)) return prev;
+      return {
+        ...prev,
+        [normalizedRoomId]: [...list, message],
+      };
+    });
+
+    setLatestMessages((prev) => ({
+      ...prev,
+      [normalizedRoomId]: toLatestPreview(normalizedRoomId, message),
+    }));
+
+    const myUserId = currentUserIdRef.current;
+    const isViewingRoom = activeRoomIdRef.current === normalizedRoomId;
+    const isOwnMessage = myUserId != null && message.senderId === myUserId;
+
+    if (!isViewingRoom && !isOwnMessage) {
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [normalizedRoomId]: (prev[normalizedRoomId] ?? 0) + 1,
+      }));
+    }
+  }, []);
+
+  const receiveMessage = useCallback(
+    (roomId: string, raw: unknown) => {
+      ingestMessage(roomId, raw);
+    },
+    [ingestMessage]
+  );
+
+  const teardownChannels = useCallback(async () => {
+    const supabase = getBrowserSupabaseClient();
+    const channels = channelsRef.current;
+    await Promise.all(
+      [...channels.values()].map((ch) => supabase.removeChannel(ch))
+    );
+    channels.clear();
+    subscribingRef.current.clear();
+    subscribedRoomIdsRef.current = [];
+  }, []);
+
+  const subscribeToRoom = useCallback(
+    async (roomId: string): Promise<void> => {
+      const normalizedId = roomId.trim();
+      if (!normalizedId || !readStoredToken()) return;
+
+      if (channelsRef.current.has(normalizedId)) return;
+
+      const pending = subscribingRef.current.get(normalizedId);
+      if (pending) {
+        await pending;
+        return;
+      }
+
+      const supabase = getBrowserSupabaseClient();
+      const task = (async () => {
+        const channel = createChatRoomChannel(supabase, normalizedId);
+        channel.on(
+          "broadcast",
+          { event: CHAT_MESSAGE_EVENT },
+          ({ payload }) => {
+            ingestMessage(normalizedId, payload);
+          }
+        );
+
+        await new Promise<void>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(
+              new Error(
+                `[GlobalSocketProvider] subscribe timeout: ${normalizedId}`
+              )
+            );
+          }, SUBSCRIBE_TIMEOUT_MS);
+
+          channel.subscribe((status, err) => {
+            if (status === "SUBSCRIBED") {
+              clearTimeout(timeoutId);
+              resolve();
+              return;
+            }
+            if (
+              status === "CHANNEL_ERROR" ||
+              status === "TIMED_OUT" ||
+              status === "CLOSED"
+            ) {
+              clearTimeout(timeoutId);
+              reject(
+                err ??
+                  new Error(
+                    `[GlobalSocketProvider] subscribe ${status}: ${normalizedId}`
+                  )
+              );
+            }
+          });
+        });
+
+        channelsRef.current.set(normalizedId, channel);
+        if (!subscribedRoomIdsRef.current.includes(normalizedId)) {
+          subscribedRoomIdsRef.current = [
+            ...subscribedRoomIdsRef.current,
+            normalizedId,
+          ];
+        }
+      })();
+
+      subscribingRef.current.set(normalizedId, task);
+      try {
+        await task;
+      } catch (e) {
+        const ch = channelsRef.current.get(normalizedId);
+        if (ch) {
+          await supabase.removeChannel(ch);
+          channelsRef.current.delete(normalizedId);
+        }
+        console.error("[GlobalSocketProvider] subscribeToRoom failed", e);
+      } finally {
+        subscribingRef.current.delete(normalizedId);
+      }
+    },
+    [ingestMessage]
+  );
+
+  const ensureRoomChannel = useCallback(
+    (roomId: string) => subscribeToRoom(roomId),
+    [subscribeToRoom]
+  );
+
+  const syncRoomChannels = useCallback(
+    async (roomIds: string[]) => {
+      const token = readStoredToken();
+      if (!token) {
+        await teardownChannels();
+        return;
+      }
+
+      const supabase = getBrowserSupabaseClient();
+      const nextIds = [
+        ...new Set(roomIds.map((id) => id.trim()).filter(Boolean)),
+      ];
+      const prevIds = subscribedRoomIdsRef.current;
+
+      for (const id of prevIds) {
+        if (!nextIds.includes(id)) {
+          const ch = channelsRef.current.get(id);
+          if (ch) {
+            await supabase.removeChannel(ch);
+            channelsRef.current.delete(id);
+          }
+        }
+      }
+
+      await Promise.all(nextIds.map((id) => subscribeToRoom(id)));
+      subscribedRoomIdsRef.current = nextIds;
+    },
+    [subscribeToRoom, teardownChannels]
+  );
+
+  const refreshRooms = useCallback(() => {
+    const token = readStoredToken();
+    const user = readStoredUser();
+    if (!token || !user) return;
+
+    currentUserIdRef.current = user.userId;
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/chat", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        let data: { ok?: boolean; rooms?: ChatRoomListItemDTO[] } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+        if (!res.ok || !data.ok || !Array.isArray(data.rooms)) return;
+        await syncRoomChannels(data.rooms.map((r) => r.roomId));
+      } catch (e) {
+        console.error("[GlobalSocketProvider] refreshRooms failed", e);
+      }
+    })();
+  }, [syncRoomChannels]);
+
+  useEffect(() => {
+    return () => {
+      void teardownChannels();
+    };
+  }, [teardownChannels]);
+
+  useEffect(() => {
+    const user = readStoredUser();
+    currentUserIdRef.current = user?.userId ?? null;
+    if (user && readStoredToken() && pathname && !pathname.startsWith("/login")) {
+      refreshRooms();
+    }
+  }, [pathname, refreshRooms]);
+
+  useEffect(() => {
+    if (!activeRoomId) return;
+    setUnreadCounts((prev) => {
+      if (!prev[activeRoomId]) return prev;
+      const next = { ...prev };
+      delete next[activeRoomId];
+      return next;
+    });
+  }, [activeRoomId]);
+
+  const getRoomMessages = useCallback(
+    (roomId: string) => roomMessages[roomId] ?? [],
+    [roomMessages]
+  );
+
+  const value = useMemo(
+    () => ({
+      roomMessages,
+      latestMessages,
+      unreadCounts,
+      activeRoomId,
+      refreshRooms,
+      ensureRoomChannel,
+      receiveMessage,
+      getRoomMessages,
+    }),
+    [
+      roomMessages,
+      latestMessages,
+      unreadCounts,
+      activeRoomId,
+      refreshRooms,
+      ensureRoomChannel,
+      receiveMessage,
+      getRoomMessages,
+    ]
+  );
+
+  return (
+    <GlobalSocketContext.Provider value={value}>
+      {children}
+    </GlobalSocketContext.Provider>
+  );
+}

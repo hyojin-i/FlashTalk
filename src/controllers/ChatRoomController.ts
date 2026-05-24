@@ -1,6 +1,9 @@
+import type { Message } from "@/domain/message/Message";
+import { MessageFactory } from "@/domain/message/MessageFactory";
 import type { ChatRoom } from "@/entities/ChatRoom";
 import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
 import type { ParticipantsDTO } from "@/entities/Participants";
+import { broadcastMessageToRoom } from "@/lib/message-broadcast";
 import { normalizeUserId } from "@/lib/presence-channel";
 import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { ChatRoomRepository } from "@/repositories/ChatRoomRepository";
@@ -101,8 +104,37 @@ export class ChatRoomController {
     const users = await this.userRepository.getUserInfo(targetUserIds);
 
     return users.map((user) => ({
+      userId: user.userId,
       studentId: user.studentId,
       name: user.name?.trim() || user.studentId,
     }));
+  }
+
+  /** Creates a message and broadcasts it to the chat room channel. */
+  async sendMessage(
+    roomId: string,
+    userId: string,
+    type: string,
+    content: string
+  ): Promise<Message> {
+    const normalizedType = type.trim().toLowerCase();
+    if (normalizedType !== "text") {
+      throw new Error("Only text messages are supported");
+    }
+
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error("Message content is required");
+    }
+
+    const message = MessageFactory.createMessage(
+      "text",
+      trimmedContent,
+      userId,
+      roomId
+    );
+
+    await broadcastMessageToRoom(roomId, message);
+    return message;
   }
 }

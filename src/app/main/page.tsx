@@ -10,6 +10,7 @@ import {
   normalizeUserId,
 } from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
@@ -113,6 +114,7 @@ function ChatBubbleIcon() {
 
 export default function MainView() {
   const router = useRouter();
+  const { latestMessages, unreadCounts, refreshRooms } = useGlobalSocket();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const handleInviteBroadcastRef = useRef<(payload: unknown) => void>(() => {});
 
@@ -267,6 +269,7 @@ export default function MainView() {
         }
 
         setChatRooms(data.rooms);
+        refreshRooms();
       } catch {
         setRoomsError("네트워크 오류가 발생했습니다.");
         setChatRooms([]);
@@ -544,6 +547,8 @@ export default function MainView() {
           )}
           {chatRooms.map((room) => {
             const listTitle = formatChatRoomListTitle(room.participants);
+            const latest = latestMessages[room.roomId];
+            const unread = unreadCounts[room.roomId] ?? 0;
             return (
               <li key={room.roomId}>
                 <button
@@ -558,7 +563,17 @@ export default function MainView() {
                     <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
                       {listTitle}
                     </span>
+                    {latest?.content ? (
+                      <span className="mt-0.5 block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                        {latest.content}
+                      </span>
+                    ) : null}
                   </span>
+                  {unread > 0 && (
+                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
                 </button>
               </li>
             );
