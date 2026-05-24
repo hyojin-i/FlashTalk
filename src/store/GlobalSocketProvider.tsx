@@ -44,6 +44,8 @@ type GlobalSocketContextValue = {
   ensureRoomChannel: (roomId: string) => Promise<void>;
   receiveMessage: (roomId: string, raw: unknown) => void;
   getRoomMessages: (roomId: string) => ChatMessagePayload[];
+  /** Logout step 3: release all Realtime channels and reset in-memory state. */
+  disconnectAllSockets: () => Promise<void>;
 };
 
 const GlobalSocketContext = createContext<GlobalSocketContextValue | null>(
@@ -168,6 +170,13 @@ export function GlobalSocketProvider({
     [ingestMessage]
   );
 
+  const resetGlobalState = useCallback(() => {
+    currentUserIdRef.current = null;
+    setRoomMessages({});
+    setLatestMessages({});
+    setUnreadCounts({});
+  }, []);
+
   const teardownChannels = useCallback(async () => {
     const supabase = getBrowserSupabaseClient();
     const channels = channelsRef.current;
@@ -178,6 +187,26 @@ export function GlobalSocketProvider({
     subscribingRef.current.clear();
     subscribedRoomIdsRef.current = [];
   }, []);
+
+  /** Procedure step 3: bulk-unsubscribe chat + presence channels via Supabase. */
+  const disconnectAllSockets = useCallback(async () => {
+    const supabase = getBrowserSupabaseClient();
+    const tracked = channelsRef.current;
+    await Promise.all(
+      [...tracked.values()].map((ch) => {
+        try {
+          ch.untrack();
+        } catch {
+          /* presence channel may not be tracking */
+        }
+      })
+    );
+    await supabase.removeAllChannels();
+    channelsRef.current.clear();
+    subscribingRef.current.clear();
+    subscribedRoomIdsRef.current = [];
+    resetGlobalState();
+  }, [resetGlobalState]);
 
   const subscribeToRoom = useCallback(
     async (roomId: string): Promise<void> => {
@@ -360,6 +389,7 @@ export function GlobalSocketProvider({
       ensureRoomChannel,
       receiveMessage,
       getRoomMessages,
+      disconnectAllSockets,
     }),
     [
       roomMessages,
@@ -370,6 +400,7 @@ export function GlobalSocketProvider({
       ensureRoomChannel,
       receiveMessage,
       getRoomMessages,
+      disconnectAllSockets,
     ]
   );
 

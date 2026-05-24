@@ -114,7 +114,8 @@ function ChatBubbleIcon() {
 
 export default function MainView() {
   const router = useRouter();
-  const { latestMessages, unreadCounts, refreshRooms } = useGlobalSocket();
+  const { latestMessages, unreadCounts, refreshRooms, disconnectAllSockets } =
+    useGlobalSocket();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const handleInviteBroadcastRef = useRef<(payload: unknown) => void>(() => {});
 
@@ -483,20 +484,17 @@ export default function MainView() {
         return;
       }
 
-      const ch = channelRef.current;
-      if (ch) {
-        ch.untrack();
-        getBrowserSupabaseClient().removeChannel(ch);
-        channelRef.current = null;
-      }
+      await disconnectAllSockets();
+      channelRef.current = null;
 
       try {
-        sessionStorage.removeItem(CLIENT_JWT_KEY);
-        sessionStorage.removeItem(CLIENT_USER_KEY);
+        sessionStorage.clear();
       } catch {
         /* ignore */
       }
 
+      setInviteToast(null);
+      setChatRooms([]);
       setLogoutModalOpen(false);
       router.push("/login");
     } catch {
