@@ -5,6 +5,7 @@ import type { ParticipantsDTO } from "@/entities/Participants";
 import type { SessionUserDTO } from "@/entities/User";
 import { readRoomMessages } from "@/lib/chat-room-messages-storage";
 import type { ChatMessagePayload } from "@/lib/message-payload";
+import { downloadFileFromUrl } from "@/lib/supabase-file-download";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { validateFile } from "@/utils/fileValidator";
@@ -142,6 +143,7 @@ export default function ChatView({
   const [isLoading, setIsLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const totalParticipantCount = participants.length + 1;
 
@@ -321,6 +323,15 @@ export default function ChatView({
     setTransientMessageList(mergeMessages(stored, live));
   }, [roomId, roomMessages, getRoomMessages]);
 
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    if (transientMessageList.length === 0) return;
+    scrollToBottom();
+  }, [transientMessageList, scrollToBottom]);
+
   useEffect(() => {
     const token = readStoredToken();
     if (!token) {
@@ -465,15 +476,13 @@ export default function ChatView({
                   </span>
                   <span className="text-xs opacity-80">{fileSizeLabel}</span>
                   {fileUrl ? (
-                    <a
-                      href={fileUrl}
-                      download={fileName}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => downloadFileFromUrl(fileUrl, fileName)}
                       className="inline-flex w-fit items-center gap-1 rounded-lg border border-current/20 px-2.5 py-1 text-xs font-medium hover:opacity-80"
                     >
                       저장
-                    </a>
+                    </button>
                   ) : null}
                 </div>
               );
@@ -547,6 +556,7 @@ export default function ChatView({
               </div>
             );
           })}
+          <div ref={messagesEndRef} className="h-0 shrink-0" aria-hidden />
         </main>
 
         {/* Footer */}
