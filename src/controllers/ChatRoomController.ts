@@ -118,23 +118,41 @@ export class ChatRoomController {
     content: string
   ): Promise<Message> {
     const normalizedType = type.trim().toLowerCase();
-    if (normalizedType !== "text") {
-      throw new Error("Only text messages are supported");
+
+    if (normalizedType === "text") {
+      const trimmedContent = content.trim();
+      if (!trimmedContent) {
+        throw new Error("Message content is required");
+      }
+
+      const message = MessageFactory.createMessage(
+        "text",
+        trimmedContent,
+        userId,
+        roomId
+      );
+
+      await broadcastMessageToRoom(roomId, message);
+      return message;
     }
 
-    const trimmedContent = content.trim();
-    if (!trimmedContent) {
-      throw new Error("Message content is required");
+    if (normalizedType === "file") {
+      const trimmedContent = content.trim();
+      if (!trimmedContent) {
+        throw new Error("File message content is required");
+      }
+
+      const message = MessageFactory.createMessage(
+        "file",
+        trimmedContent,
+        userId,
+        roomId
+      );
+
+      await broadcastMessageToRoom(roomId, message);
+      return message;
     }
 
-    const message = MessageFactory.createMessage(
-      "text",
-      trimmedContent,
-      userId,
-      roomId
-    );
-
-    await broadcastMessageToRoom(roomId, message);
-    return message;
+    throw new Error("Unsupported message type");
   }
 }

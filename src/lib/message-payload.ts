@@ -11,6 +11,7 @@ export type ChatMessagePayload = {
   content?: string;
   fileUrl?: string;
   fileName?: string;
+  fileSize?: number;
 };
 
 export function messageToPayload(message: Message): ChatMessagePayload {
@@ -32,6 +33,7 @@ export function messageToPayload(message: Message): ChatMessagePayload {
       type: "file",
       fileUrl: message.fileUrl,
       fileName: message.fileName,
+      fileSize: message.fileSize,
     };
   }
 
@@ -53,7 +55,8 @@ export function payloadToMessage(payload: ChatMessagePayload): Message {
     payload.senderId,
     new Date(payload.createdAt),
     payload.fileUrl ?? "",
-    payload.fileName ?? ""
+    payload.fileName ?? "",
+    payload.fileSize ?? 0
   );
 }
 

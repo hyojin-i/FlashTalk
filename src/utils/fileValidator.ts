@@ -11,7 +11,7 @@ const ALLOWED_EXTENSIONS = [
     'zip', 'tar', 'gz'                                                              // 압축
 ];
 
-export const isValidFile = (file: File): ValidationResult => {
+export const validateFile = (file: File): ValidationResult => {
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
     if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
         return {
@@ -32,3 +32,6 @@ export const isValidFile = (file: File): ValidationResult => {
         errorMessage: null
     };
 };
+
+/** @deprecated Use validateFile */
+export const isValidFile = validateFile;

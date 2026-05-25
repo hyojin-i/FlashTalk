@@ -1,13 +1,15 @@
 "use client";
 
+import type { FileInfoDTO } from "@/entities/FileInfoDTO";
 import type { ParticipantsDTO } from "@/entities/Participants";
 import type { SessionUserDTO } from "@/entities/User";
 import { readRoomMessages } from "@/lib/chat-room-messages-storage";
 import type { ChatMessagePayload } from "@/lib/message-payload";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
+import { validateFile } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 
 function formatTodayDateLabel(): string {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -86,6 +88,20 @@ function resolveSenderName(
   return "알 수 없음";
 }
 
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const rounded =
+    unitIndex === 0 ? String(Math.round(size)) : size.toFixed(1);
+  return `${rounded} ${units[unitIndex]}`;
+}
+
 function mergeMessages(
   stored: ChatMessagePayload[],
   live: ChatMessagePayload[]
@@ -121,8 +137,11 @@ export default function ChatView({
     ChatMessagePayload[]
   >([]);
   const [currentMessage, setCurrentMessage] = useState("");
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const totalParticipantCount = participants.length + 1;
 
@@ -130,9 +149,23 @@ export default function ChatView({
   const headerSubtitle =
     participants.length === 1 ? participants[0].studentId : null;
 
+  const attachFile = useCallback((file: File): void => {
+    const result = validateFile(file);
+    if (!result.isValid) {
+      setAttachedFile(null);
+      setAttachError(
+        result.errorMessage ?? "이 파일은 전송할 수 없습니다."
+      );
+      return;
+    }
+    setAttachError(null);
+    setAttachedFile(file);
+  }, []);
+
   const requestSendMessage = useCallback(async (): Promise<void> => {
     const trimmed = currentMessage.trim();
-    if (!trimmed || isLoading) return;
+    const fileToSend = attachedFile;
+    if ((!trimmed && !fileToSend) || isLoading) return;
 
     const token = readStoredToken();
     if (!token) {
@@ -142,9 +175,84 @@ export default function ChatView({
 
     setIsLoading(true);
     setSendError(null);
+    setAttachError(null);
+    const messageDraft = trimmed;
     setCurrentMessage("");
 
     try {
+      if (fileToSend) {
+        const uploadForm = new FormData();
+        uploadForm.append("file", fileToSend);
+
+        const uploadRes = await fetch("/api/files", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: uploadForm,
+        });
+
+        let uploadData: {
+          ok?: boolean;
+          fileInfo?: FileInfoDTO;
+          error?: string;
+        } = {};
+        try {
+          uploadData = (await uploadRes.json()) as typeof uploadData;
+        } catch {
+          /* ignore */
+        }
+
+        if (!uploadRes.ok || !uploadData.fileInfo) {
+          setSendError(
+            typeof uploadData.error === "string"
+              ? uploadData.error
+              : "파일 업로드에 실패했습니다."
+          );
+          setAttachedFile(fileToSend);
+          return;
+        }
+
+        const chatRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            roomId,
+            type: "file",
+            content: JSON.stringify(uploadData.fileInfo),
+          }),
+        });
+
+        let chatData: {
+          ok?: boolean;
+          message?: ChatMessagePayload;
+          error?: string;
+        } = {};
+        try {
+          chatData = (await chatRes.json()) as typeof chatData;
+        } catch {
+          /* ignore */
+        }
+
+        if (!chatRes.ok) {
+          setSendError(
+            typeof chatData.error === "string"
+              ? chatData.error
+              : "파일 메시지 전송에 실패했습니다."
+          );
+          setAttachedFile(fileToSend);
+          return;
+        }
+
+        if (chatData.message) {
+          receiveMessage(roomId, chatData.message);
+        }
+        setAttachedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -154,7 +262,7 @@ export default function ChatView({
         body: JSON.stringify({
           roomId,
           type: "text",
-          content: trimmed,
+          content: messageDraft,
         }),
       });
 
@@ -172,7 +280,7 @@ export default function ChatView({
             ? data.error
             : "메시지 전송에 실패했습니다."
         );
-        setCurrentMessage(trimmed);
+        setCurrentMessage(messageDraft);
         return;
       }
 
@@ -181,11 +289,22 @@ export default function ChatView({
       }
     } catch {
       setSendError("네트워크 오류가 발생했습니다.");
-      setCurrentMessage(trimmed);
+      if (fileToSend) {
+        setAttachedFile(fileToSend);
+      } else {
+        setCurrentMessage(messageDraft);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [currentMessage, isLoading, roomId, router, receiveMessage]);
+  }, [
+    attachedFile,
+    currentMessage,
+    isLoading,
+    roomId,
+    router,
+    receiveMessage,
+  ]);
 
   useEffect(() => {
     const user = readStoredUser();
@@ -325,8 +444,6 @@ export default function ChatView({
           </div>
 
           {transientMessageList.map((msg) => {
-            if (msg.type !== "text") return null;
-
             const isMine =
               currentUser != null && msg.senderId === currentUser.userId;
             const senderName = resolveSenderName(
@@ -335,6 +452,69 @@ export default function ChatView({
               participants
             );
             const timeLabel = formatMessageTime(msg.createdAt);
+
+            if (msg.type === "file") {
+              const fileName = msg.fileName ?? "파일";
+              const fileUrl = msg.fileUrl ?? "";
+              const fileSizeLabel = formatFileSize(msg.fileSize ?? 0);
+
+              const fileBubble = (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-inherit">
+                    {fileName}
+                  </span>
+                  <span className="text-xs opacity-80">{fileSizeLabel}</span>
+                  {fileUrl ? (
+                    <a
+                      href={fileUrl}
+                      download={fileName}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex w-fit items-center gap-1 rounded-lg border border-current/20 px-2.5 py-1 text-xs font-medium hover:opacity-80"
+                    >
+                      저장
+                    </a>
+                  ) : null}
+                </div>
+              );
+
+              if (isMine) {
+                return (
+                  <div key={msg.id} className="flex flex-col items-end gap-1">
+                    <div
+                      className="rounded-2xl rounded-tr-none px-4 py-2.5 text-white"
+                      style={{ backgroundColor: "#d070fb" }}
+                    >
+                      {fileBubble}
+                    </div>
+                    <span className="text-[11px] text-zinc-400">
+                      {timeLabel}
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={msg.id}
+                  className="mt-2 flex flex-col items-start gap-1"
+                >
+                  <span className="ml-1 text-xs font-medium text-zinc-600">
+                    {senderName}
+                  </span>
+                  <div className="flex items-end gap-2">
+                    <div className="rounded-2xl rounded-tl-none bg-white px-4 py-2.5 text-zinc-800 shadow-sm">
+                      {fileBubble}
+                    </div>
+                    <span className="text-[11px] text-zinc-400">
+                      {timeLabel}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+
+            if (msg.type !== "text") return null;
 
             if (isMine) {
               return (
@@ -371,17 +551,51 @@ export default function ChatView({
 
         {/* Footer */}
         <footer className="flex shrink-0 flex-col gap-1 bg-white p-4">
+          {attachError && (
+            <p className="text-center text-xs text-red-500">{attachError}</p>
+          )}
           {sendError && (
             <p className="text-center text-xs text-red-500">{sendError}</p>
+          )}
+          {attachedFile && (
+            <div className="flex items-center justify-between rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-700">
+              <span className="truncate">
+                {attachedFile.name} ({formatFileSize(attachedFile.size)})
+              </span>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() => {
+                  setAttachedFile(null);
+                  setAttachError(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="ml-2 shrink-0 text-zinc-500 hover:text-black disabled:opacity-50"
+              >
+                제거
+              </button>
+            </div>
           )}
           <form
             className="flex items-center gap-3"
             onSubmit={handleSubmit}
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              disabled={isLoading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) attachFile(file);
+              }}
+            />
             <button
               type="button"
-              className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black"
+              className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black disabled:opacity-50"
               disabled={isLoading}
+              aria-label="파일 첨부"
+              onClick={() => fileInputRef.current?.click()}
             >
               <svg
                 className="h-6 w-6"
@@ -397,7 +611,19 @@ export default function ChatView({
                 />
               </svg>
             </button>
-            <div className="flex flex-1 items-center rounded-xl bg-zinc-100 px-4 py-2.5">
+            <div
+              className="flex flex-1 items-center rounded-xl bg-zinc-100 px-4 py-2.5"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const file = e.dataTransfer.files?.[0];
+                if (file) attachFile(file);
+              }}
+            >
               <input
                 type="text"
                 value={currentMessage}
@@ -409,7 +635,9 @@ export default function ChatView({
             </div>
             <button
               type="submit"
-              disabled={isLoading || !currentMessage.trim()}
+              disabled={
+                isLoading || (!currentMessage.trim() && !attachedFile)
+              }
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               <svg
