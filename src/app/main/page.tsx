@@ -114,8 +114,13 @@ function ChatBubbleIcon() {
 
 export default function MainView() {
   const router = useRouter();
-  const { latestMessages, unreadCounts, refreshRooms, disconnectAllSockets } =
-    useGlobalSocket();
+  const {
+    latestMessages,
+    unreadCounts,
+    roomLeaveUi,
+    refreshRooms,
+    disconnectAllSockets,
+  } = useGlobalSocket();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const handleInviteBroadcastRef = useRef<(payload: unknown) => void>(() => {});
 
@@ -544,8 +549,15 @@ export default function MainView() {
             </li>
           )}
           {chatRooms.map((room) => {
-            const listTitle = formatChatRoomListTitle(room.participants);
+            const leaveUi = roomLeaveUi[room.roomId];
+            const listTitle = leaveUi?.partnerUnknown
+              ? "(알 수 없음)"
+              : formatChatRoomListTitle(room.participants);
             const latest = latestMessages[room.roomId];
+            const previewText =
+              leaveUi?.sidebarPreview ?? latest?.content ?? "";
+            const previewIsPartnerLeft =
+              leaveUi?.partnerUnknown ?? latest?.isPartnerLeft ?? false;
             const unread = unreadCounts[room.roomId] ?? 0;
             return (
               <li key={room.roomId}>
@@ -561,9 +573,15 @@ export default function MainView() {
                     <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
                       {listTitle}
                     </span>
-                    {latest?.content ? (
-                      <span className="mt-0.5 block truncate text-xs text-zinc-500 dark:text-zinc-400">
-                        {latest.content}
+                    {previewText ? (
+                      <span
+                        className={`mt-0.5 block truncate text-xs ${
+                          previewIsPartnerLeft
+                            ? "text-red-500 dark:text-red-400"
+                            : "text-zinc-500 dark:text-zinc-400"
+                        }`}
+                      >
+                        {previewText}
                       </span>
                     ) : null}
                   </span>

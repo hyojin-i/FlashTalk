@@ -41,3 +41,12 @@ export function appendRoomMessage(
 
   sessionStorage.setItem(key, JSON.stringify([...existing, message]));
 }
+
+/** Procedure step 10.2: remove `chat_history_{roomId}` from sessionStorage. */
+export function clearRoomMessages(roomId: string): void {
+  try {
+    sessionStorage.removeItem(chatHistoryStorageKey(roomId));
+  } catch {
+    /* ignore */
+  }
+}

@@ -169,6 +169,54 @@ export class ChatRoomRepository {
     }));
   }
 
+  /** `RoomParticipant`에서 해당 사용자를 삭제합니다. */
+  async deleteParticipant(roomId: string, userId: string): Promise<void> {
+    const { error } = await ChatRoomRepository.db
+      .from("RoomParticipant")
+      .delete()
+      .eq("roomId", roomId)
+      .eq("userId", userId);
+
+    if (error) {
+      console.error(
+        "[ChatRoomRepository.deleteParticipant]",
+        error.message
+      );
+      throw new Error(error.message);
+    }
+  }
+
+  /** 채팅방 참가자 수를 반환합니다. */
+  async countParticipants(roomId: string): Promise<number> {
+    const { count, error } = await ChatRoomRepository.db
+      .from("RoomParticipant")
+      .select("ParticipantId", { count: "exact", head: true })
+      .eq("roomId", roomId);
+
+    if (error) {
+      console.error(
+        "[ChatRoomRepository.countParticipants]",
+        error.message
+      );
+      throw new Error(error.message);
+    }
+
+    return count ?? 0;
+  }
+
+  /** `ChatRoom` 레코드를 삭제합니다 (CASCADE로 연관 데이터 정리). */
+  async deleteRoom(roomId: string): Promise<void> {
+    const { error } = await ChatRoomRepository.db
+      .from("ChatRoom")
+      .delete()
+      .eq("roomId", roomId);
+
+    if (error) {
+      console.error("[ChatRoomRepository.deleteRoom]", error.message);
+      throw new Error(error.message);
+    }
+  }
+
   /** `RoomParticipant` 테이블에 참가자 목록을 추가합니다. */
   async insertParticipant(roomId: string, userIdList: string[]): Promise<void> {
     const joinedAt = new Date().toISOString();

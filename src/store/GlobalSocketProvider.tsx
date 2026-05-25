@@ -6,10 +6,14 @@ import {
   CHAT_MESSAGE_EVENT,
   createChatRoomChannel,
 } from "@/lib/chat-room-channel";
-import { appendRoomMessage } from "@/lib/chat-room-messages-storage";
+import {
+  appendRoomMessage,
+  clearRoomMessages,
+} from "@/lib/chat-room-messages-storage";
 import type { ChatMessagePayload } from "@/lib/message-payload";
 import {
   isChatMessagePayload,
+  isSystemMessagePayload,
   unwrapBroadcastPayload,
 } from "@/lib/message-payload";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
@@ -33,17 +37,29 @@ export type LatestMessagePreview = {
   content: string;
   createdAt: string;
   senderId: string;
+  isSystemNotice?: boolean;
+  isPartnerLeft?: boolean;
+};
+
+/** UI state after USER_LEFT (1:1 disable vs group notice). */
+export type RoomLeaveUiState = {
+  chatDisabled: boolean;
+  partnerUnknown: boolean;
+  sidebarPreview: string;
 };
 
 type GlobalSocketContextValue = {
   roomMessages: Record<string, ChatMessagePayload[]>;
   latestMessages: Record<string, LatestMessagePreview>;
   unreadCounts: Record<string, number>;
+  roomLeaveUi: Record<string, RoomLeaveUiState>;
   activeRoomId: string | null;
   refreshRooms: () => void;
   ensureRoomChannel: (roomId: string) => Promise<void>;
   receiveMessage: (roomId: string, raw: unknown) => void;
   getRoomMessages: (roomId: string) => ChatMessagePayload[];
+  /** Procedure step 10: unsubscribe, clear history, remove store data. */
+  leaveRoomAndCleanup: (roomId: string) => Promise<void>;
   /** Logout step 3: release all Realtime channels and reset in-memory state. */
   disconnectAllSockets: () => Promise<void>;
 };
@@ -79,6 +95,20 @@ function toLatestPreview(
   roomId: string,
   message: ChatMessagePayload
 ): LatestMessagePreview {
+  if (message.type === "system") {
+    const partnerLeft =
+      message.actionType === "USER_LEFT" &&
+      message.remainingCount === 1;
+    return {
+      roomId,
+      content: message.content ?? "",
+      createdAt: message.createdAt,
+      senderId: message.senderId,
+      isSystemNotice: true,
+      isPartnerLeft: partnerLeft,
+    };
+  }
+
   return {
     roomId,
     content:
@@ -116,6 +146,9 @@ export function GlobalSocketProvider({
     Record<string, LatestMessagePreview>
   >({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [roomLeaveUi, setRoomLeaveUi] = useState<
+    Record<string, RoomLeaveUiState>
+  >({});
 
   const channelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
   const subscribedRoomIdsRef = useRef<string[]>([]);
@@ -175,7 +208,61 @@ export function GlobalSocketProvider({
     setRoomMessages({});
     setLatestMessages({});
     setUnreadCounts({});
+    setRoomLeaveUi({});
   }, []);
+
+  const applyUserLeftUiState = useCallback(
+    (normalizedRoomId: string, message: ChatMessagePayload) => {
+      if (message.type !== "system" || message.actionType !== "USER_LEFT") {
+        return;
+      }
+
+      const preview = message.content ?? "";
+      const oneOnOneLeft = message.remainingCount === 1;
+
+      setRoomLeaveUi((prev) => ({
+        ...prev,
+        [normalizedRoomId]: {
+          chatDisabled: oneOnOneLeft,
+          partnerUnknown: oneOnOneLeft,
+          sidebarPreview: preview,
+        },
+      }));
+    },
+    []
+  );
+
+  const ingestSystemMessage = useCallback(
+    (roomId: string, raw: unknown) => {
+      const unwrapped = unwrapBroadcastPayload(raw);
+      if (!isSystemMessagePayload(unwrapped)) return;
+
+      const message: ChatMessagePayload = {
+        ...unwrapped,
+        roomId: unwrapped.roomId ?? roomId,
+      };
+      const normalizedRoomId = (message.roomId ?? roomId).trim();
+
+      appendRoomMessage(normalizedRoomId, message);
+
+      setRoomMessages((prev) => {
+        const list = prev[normalizedRoomId] ?? [];
+        if (list.some((m) => m.id === message.id)) return prev;
+        return {
+          ...prev,
+          [normalizedRoomId]: [...list, message],
+        };
+      });
+
+      setLatestMessages((prev) => ({
+        ...prev,
+        [normalizedRoomId]: toLatestPreview(normalizedRoomId, message),
+      }));
+
+      applyUserLeftUiState(normalizedRoomId, message);
+    },
+    [applyUserLeftUiState]
+  );
 
   const teardownChannels = useCallback(async () => {
     const supabase = getBrowserSupabaseClient();
@@ -228,6 +315,11 @@ export function GlobalSocketProvider({
           "broadcast",
           { event: CHAT_MESSAGE_EVENT },
           ({ payload }) => {
+            const unwrapped = unwrapBroadcastPayload(payload);
+            if (isSystemMessagePayload(unwrapped)) {
+              ingestSystemMessage(normalizedId, unwrapped);
+              return;
+            }
             ingestMessage(normalizedId, payload);
           }
         );
@@ -286,8 +378,51 @@ export function GlobalSocketProvider({
         subscribingRef.current.delete(normalizedId);
       }
     },
-    [ingestMessage]
+    [ingestMessage, ingestSystemMessage]
   );
+
+  const leaveRoomAndCleanup = useCallback(async (roomId: string) => {
+    const normalizedId = roomId.trim();
+    if (!normalizedId) return;
+
+    const supabase = getBrowserSupabaseClient();
+    const channel = channelsRef.current.get(normalizedId);
+    if (channel) {
+      await supabase.removeChannel(channel);
+      channelsRef.current.delete(normalizedId);
+    }
+    subscribingRef.current.delete(normalizedId);
+    subscribedRoomIdsRef.current = subscribedRoomIdsRef.current.filter(
+      (id) => id !== normalizedId
+    );
+
+    clearRoomMessages(normalizedId);
+
+    setRoomMessages((prev) => {
+      if (!prev[normalizedId]) return prev;
+      const next = { ...prev };
+      delete next[normalizedId];
+      return next;
+    });
+    setLatestMessages((prev) => {
+      if (!prev[normalizedId]) return prev;
+      const next = { ...prev };
+      delete next[normalizedId];
+      return next;
+    });
+    setUnreadCounts((prev) => {
+      if (!prev[normalizedId]) return prev;
+      const next = { ...prev };
+      delete next[normalizedId];
+      return next;
+    });
+    setRoomLeaveUi((prev) => {
+      if (!prev[normalizedId]) return prev;
+      const next = { ...prev };
+      delete next[normalizedId];
+      return next;
+    });
+  }, []);
 
   const ensureRoomChannel = useCallback(
     (roomId: string) => subscribeToRoom(roomId),
@@ -384,22 +519,26 @@ export function GlobalSocketProvider({
       roomMessages,
       latestMessages,
       unreadCounts,
+      roomLeaveUi,
       activeRoomId,
       refreshRooms,
       ensureRoomChannel,
       receiveMessage,
       getRoomMessages,
+      leaveRoomAndCleanup,
       disconnectAllSockets,
     }),
     [
       roomMessages,
       latestMessages,
       unreadCounts,
+      roomLeaveUi,
       activeRoomId,
       refreshRooms,
       ensureRoomChannel,
       receiveMessage,
       getRoomMessages,
+      leaveRoomAndCleanup,
       disconnectAllSockets,
     ]
   );

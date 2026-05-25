@@ -55,9 +55,27 @@ export async function POST(request: Request) {
 
     const sendRoomId =
       typeof body.roomId === "string" ? body.roomId.trim() : "";
+    const action =
+      typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
     const sendType = typeof body.type === "string" ? body.type.trim() : "";
     const sendContent =
       typeof body.content === "string" ? body.content : "";
+
+    if (action === "leave" && sendRoomId) {
+      try {
+        await chatRoomController.leaveRoom(sendRoomId, hostUserId);
+        return NextResponse.json({ ok: true }, { status: 200 });
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Failed to leave chat room";
+        const status =
+          message.includes("Not a participant") ||
+          message.includes("required")
+            ? 400
+            : 500;
+        return NextResponse.json({ ok: false, error: message }, { status });
+      }
+    }
 
     if (sendRoomId && sendType) {
       try {

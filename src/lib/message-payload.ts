@@ -2,16 +2,22 @@ import { Message } from "@/domain/message/Message";
 import { TextMessage } from "@/domain/message/TextMessage";
 import { FileMessage } from "@/domain/message/FileMessage";
 
+export type SystemActionType = "USER_LEFT";
+
 export type ChatMessagePayload = {
   roomId?: string;
   id: string;
   senderId: string;
   createdAt: string;
-  type: "text" | "file";
+  type: "text" | "file" | "system";
   content?: string;
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
+  actionType?: SystemActionType;
+  leftUserId?: string;
+  leftUserName?: string;
+  remainingCount?: number;
 };
 
 export function messageToPayload(message: Message): ChatMessagePayload {
@@ -50,17 +56,39 @@ export function payloadToMessage(payload: ChatMessagePayload): Message {
     );
   }
 
-  return new FileMessage(
-    payload.id,
-    payload.senderId,
-    new Date(payload.createdAt),
-    payload.fileUrl ?? "",
-    payload.fileName ?? "",
-    payload.fileSize ?? 0
+  if (payload.type === "file") {
+    return new FileMessage(
+      payload.id,
+      payload.senderId,
+      new Date(payload.createdAt),
+      payload.fileUrl ?? "",
+      payload.fileName ?? "",
+      payload.fileSize ?? 0
+    );
+  }
+
+  throw new Error("Unsupported message type");
+}
+
+export function isSystemMessagePayload(
+  value: unknown
+): value is ChatMessagePayload {
+  const candidate = unwrapBroadcastPayload(value);
+  if (!candidate || typeof candidate !== "object") return false;
+  const o = candidate as Record<string, unknown>;
+  return (
+    o.type === "system" &&
+    typeof o.id === "string" &&
+    typeof o.createdAt === "string" &&
+    typeof o.content === "string"
   );
 }
 
-export function isChatMessagePayload(value: unknown): value is ChatMessagePayload {
+export function isChatMessagePayload(
+  value: unknown
+): value is ChatMessagePayload {
+  if (isSystemMessagePayload(value)) return true;
+
   const candidate = unwrapBroadcastPayload(value);
   if (!candidate || typeof candidate !== "object") return false;
   const o = candidate as Record<string, unknown>;

@@ -123,8 +123,15 @@ export default function ChatView({
 }) {
   const { roomId } = use(params);
   const router = useRouter();
-  const { roomMessages, getRoomMessages, ensureRoomChannel, receiveMessage } =
-    useGlobalSocket();
+  const {
+    roomMessages,
+    roomLeaveUi,
+    getRoomMessages,
+    ensureRoomChannel,
+    receiveMessage,
+    leaveRoomAndCleanup,
+    refreshRooms,
+  } = useGlobalSocket();
 
   const [participants, setParticipants] = useState<ParticipantsDTO[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(true);
@@ -142,14 +149,25 @@ export default function ChatView({
   const [attachError, setAttachError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [leavePending, setLeavePending] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const leaveUi = roomLeaveUi[roomId];
+  const chatDisabled = leaveUi?.chatDisabled ?? false;
+
   const totalParticipantCount = participants.length + 1;
 
-  const headerTitle = formatParticipantHeaderTitle(participants);
-  const headerSubtitle =
-    participants.length === 1 ? participants[0].studentId : null;
+  const headerTitle = leaveUi?.partnerUnknown
+    ? "(알 수 없음)"
+    : formatParticipantHeaderTitle(participants);
+  const headerSubtitle = leaveUi?.partnerUnknown
+    ? "(알 수 없음)"
+    : participants.length === 1
+      ? participants[0].studentId
+      : null;
 
   const attachFile = useCallback((file: File): void => {
     const result = validateFile(file);
@@ -164,10 +182,58 @@ export default function ChatView({
     setAttachedFile(file);
   }, []);
 
+  const requestLeaveRoom = useCallback(async (): Promise<void> => {
+    const token = readStoredToken();
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    setLeavePending(true);
+    setLeaveError(null);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "leave", roomId }),
+      });
+
+      let data: { ok?: boolean; error?: string } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+
+      if (!res.ok) {
+        setLeaveError(
+          typeof data.error === "string"
+            ? data.error
+            : "채팅방 나가기에 실패했습니다."
+        );
+        return;
+      }
+
+      setSettingsOpen(false);
+      setLeaveModalOpen(false);
+      await leaveRoomAndCleanup(roomId);
+      refreshRooms();
+      router.push("/main");
+    } catch {
+      setLeaveError("네트워크 오류가 발생했습니다.");
+    } finally {
+      setLeavePending(false);
+    }
+  }, [roomId, router, leaveRoomAndCleanup, refreshRooms]);
+
   const requestSendMessage = useCallback(async (): Promise<void> => {
     const trimmed = currentMessage.trim();
     const fileToSend = attachedFile;
-    if ((!trimmed && !fileToSend) || isLoading) return;
+    if ((!trimmed && !fileToSend) || isLoading || chatDisabled) return;
 
     const token = readStoredToken();
     if (!token) {
@@ -306,6 +372,7 @@ export default function ChatView({
     roomId,
     router,
     receiveMessage,
+    chatDisabled,
   ]);
 
   useEffect(() => {
@@ -464,6 +531,16 @@ export default function ChatView({
             );
             const timeLabel = formatMessageTime(msg.createdAt);
 
+            if (msg.type === "system") {
+              return (
+                <div key={msg.id} className="my-2 flex justify-center">
+                  <span className="rounded-full bg-zinc-200 px-4 py-1.5 text-xs text-zinc-600">
+                    {msg.content}
+                  </span>
+                </div>
+              );
+            }
+
             if (msg.type === "file") {
               const fileName = msg.fileName ?? "파일";
               const fileUrl = msg.fileUrl ?? "";
@@ -556,6 +633,13 @@ export default function ChatView({
               </div>
             );
           })}
+          {chatDisabled && (
+            <div className="sticky bottom-0 flex justify-center py-2">
+              <span className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-center text-xs text-red-600">
+                대화 상대가 채팅방을 나갔습니다. 대화를 이어갈 수 없습니다.
+              </span>
+            </div>
+          )}
           <div ref={messagesEndRef} className="h-0 shrink-0" aria-hidden />
         </main>
 
@@ -594,7 +678,7 @@ export default function ChatView({
               ref={fileInputRef}
               type="file"
               className="hidden"
-              disabled={isLoading}
+              disabled={isLoading || chatDisabled}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) attachFile(file);
@@ -603,7 +687,7 @@ export default function ChatView({
             <button
               type="button"
               className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black disabled:opacity-50"
-              disabled={isLoading}
+              disabled={isLoading || chatDisabled}
               aria-label="파일 첨부"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -638,15 +722,21 @@ export default function ChatView({
                 type="text"
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
-                placeholder="메시지를 입력하세요"
-                disabled={isLoading}
+                disabled={isLoading || chatDisabled}
+                placeholder={
+                  chatDisabled
+                    ? "대화 상대가 나가 대화를 이어갈 수 없습니다"
+                    : "메시지를 입력하세요"
+                }
                 className="w-full bg-transparent text-sm text-black outline-none placeholder:text-zinc-500 disabled:opacity-60"
               />
             </div>
             <button
               type="submit"
               disabled={
-                isLoading || (!currentMessage.trim() && !attachedFile)
+                chatDisabled ||
+                isLoading ||
+                (!currentMessage.trim() && !attachedFile)
               }
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white hover:bg-zinc-800 disabled:opacity-50"
             >
@@ -773,6 +863,10 @@ export default function ChatView({
           <button
             type="button"
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+            onClick={() => {
+              setLeaveError(null);
+              setLeaveModalOpen(true);
+            }}
           >
             <svg
               className="h-5 w-5"
@@ -787,10 +881,54 @@ export default function ChatView({
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
               />
             </svg>
-            Leave Room
+            대화방 나가기
           </button>
         </div>
       </aside>
+
+      {leaveModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="leave-dialog-title"
+        >
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-lg">
+            <h2
+              id="leave-dialog-title"
+              className="text-lg font-semibold text-zinc-900"
+            >
+              채팅방을 나가시겠습니까?
+            </h2>
+            {leaveError && (
+              <p className="mt-3 text-sm text-red-600">{leaveError}</p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!leavePending) {
+                    setLeaveError(null);
+                    setLeaveModalOpen(false);
+                  }
+                }}
+                disabled={leavePending}
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 disabled:opacity-60"
+              >
+                아니오
+              </button>
+              <button
+                type="button"
+                onClick={() => void requestLeaveRoom()}
+                disabled={leavePending}
+                className="rounded-full bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:opacity-60"
+              >
+                {leavePending ? "나가는 중…" : "예"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -75,3 +75,15 @@ export async function broadcastMessageToRoom(
   const supabase = getSupabaseAdminClient();
   await sendMessageOnChannel(supabase, roomId, payload);
 }
+
+/** Sends a system payload (e.g. USER_LEFT) on `chat_room_channel_{roomId}`. */
+export async function broadcastPayloadToRoom(
+  roomId: string,
+  payload: ChatMessagePayload
+): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  await sendMessageOnChannel(supabase, roomId, {
+    ...payload,
+    roomId: roomId.trim(),
+  });
+}
