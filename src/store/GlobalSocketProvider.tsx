@@ -32,6 +32,11 @@ import {
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000;
 
+function readPageVisible(): boolean {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
+
 export type LatestMessagePreview = {
   roomId: string;
   content: string;
@@ -155,6 +160,7 @@ export function GlobalSocketProvider({
   const subscribingRef = useRef<Map<string, Promise<void>>>(new Map());
   const currentUserIdRef = useRef<string | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
+  const pageVisibleRef = useRef(readPageVisible());
 
   activeRoomIdRef.current = activeRoomId;
 
@@ -300,6 +306,8 @@ export function GlobalSocketProvider({
       const normalizedId = roomId.trim();
       if (!normalizedId || !readStoredToken()) return;
 
+      if (!pageVisibleRef.current) return;
+
       if (channelsRef.current.has(normalizedId)) return;
 
       const pending = subscribingRef.current.get(normalizedId);
@@ -324,8 +332,14 @@ export function GlobalSocketProvider({
           }
         );
 
+        let subscribedOk = false;
+
         await new Promise<void>((resolve, reject) => {
           const timeoutId = setTimeout(() => {
+            if (!pageVisibleRef.current) {
+              resolve();
+              return;
+            }
             reject(
               new Error(
                 `[GlobalSocketProvider] subscribe timeout: ${normalizedId}`
@@ -336,6 +350,7 @@ export function GlobalSocketProvider({
           channel.subscribe((status, err) => {
             if (status === "SUBSCRIBED") {
               clearTimeout(timeoutId);
+              subscribedOk = true;
               resolve();
               return;
             }
@@ -345,6 +360,10 @@ export function GlobalSocketProvider({
               status === "CLOSED"
             ) {
               clearTimeout(timeoutId);
+              if (!pageVisibleRef.current) {
+                resolve();
+                return;
+              }
               reject(
                 err ??
                   new Error(
@@ -354,6 +373,11 @@ export function GlobalSocketProvider({
             }
           });
         });
+
+        if (!subscribedOk) {
+          await supabase.removeChannel(channel);
+          return;
+        }
 
         channelsRef.current.set(normalizedId, channel);
         if (!subscribedRoomIdsRef.current.includes(normalizedId)) {
@@ -373,13 +397,37 @@ export function GlobalSocketProvider({
           await supabase.removeChannel(ch);
           channelsRef.current.delete(normalizedId);
         }
-        console.error("[GlobalSocketProvider] subscribeToRoom failed", e);
+        if (pageVisibleRef.current) {
+          console.error("[GlobalSocketProvider] subscribeToRoom failed", e);
+        }
       } finally {
         subscribingRef.current.delete(normalizedId);
       }
     },
     [ingestMessage, ingestSystemMessage]
   );
+
+  const reconnectVisibleRooms = useCallback(async () => {
+    if (!pageVisibleRef.current || !readStoredToken()) return;
+
+    const supabase = getBrowserSupabaseClient();
+    const roomIds = new Set(subscribedRoomIdsRef.current);
+    const activeId = activeRoomIdRef.current?.trim();
+    if (activeId) roomIds.add(activeId);
+
+    if (roomIds.size === 0) return;
+
+    for (const id of roomIds) {
+      const ch = channelsRef.current.get(id);
+      if (ch) {
+        await supabase.removeChannel(ch);
+        channelsRef.current.delete(id);
+      }
+      subscribingRef.current.delete(id);
+    }
+
+    await Promise.all([...roomIds].map((id) => subscribeToRoom(id)));
+  }, [subscribeToRoom]);
 
   const leaveRoomAndCleanup = useCallback(async (roomId: string) => {
     const normalizedId = roomId.trim();
@@ -490,6 +538,24 @@ export function GlobalSocketProvider({
       void teardownChannels();
     };
   }, [teardownChannels]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState === "visible";
+      pageVisibleRef.current = visible;
+      if (visible) {
+        void reconnectVisibleRooms();
+      }
+    };
+
+    pageVisibleRef.current = readPageVisible();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [reconnectVisibleRooms]);
 
   useEffect(() => {
     const user = readStoredUser();
