@@ -8,6 +8,10 @@ import { formatInviteWelcomeContent } from "@/lib/invite-welcome";
 import type { ChatMessagePayload } from "@/lib/message-payload";
 import { downloadFileFromUrl } from "@/lib/supabase-file-download";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import {
+  normalizeStudentId,
+  validateStudentId,
+} from "@/lib/student-id-validation";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { validateFile } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
@@ -514,18 +518,21 @@ export default function ChatView({
     setInviteSearchError(null);
     setInviteError(null);
 
-    const studentId = inviteSearchStudentId.trim();
-    const universityName = inviteSearchUniversityName.trim();
-
-    if (!studentId) {
-      setInviteSearchError("학번을 입력해 주세요.");
+    const studentIdError = validateStudentId(inviteSearchStudentId);
+    if (studentIdError) {
+      setInviteSearchError(studentIdError);
       return;
     }
+
+    const studentId = normalizeStudentId(inviteSearchStudentId);
+    const universityName = inviteSearchUniversityName.trim();
+
     if (!universityName) {
       setInviteSearchError("학교 이름을 입력해 주세요.");
       return;
     }
 
+    setInviteSearchStudentId(studentId);
     setInviteSearchPending(true);
     void (async () => {
       try {

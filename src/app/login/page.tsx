@@ -7,9 +7,11 @@ import { useState } from "react";
 type Step = "lookup" | "login" | "register";
 
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import {
+  normalizeStudentId,
+  validateStudentId,
+} from "@/lib/student-id-validation";
 
-const STUDENT_ID_MIN_LENGTH = 7;
-const STUDENT_ID_NUMERIC = /^\d+$/;
 const NAME_HAS_DIGIT = /\d/;
 const PASSWORD_HAS_SPECIAL = /[^A-Za-z0-9]/;
 
@@ -18,26 +20,6 @@ function mapLoginErrorMessage(error: string): string {
     return "잘못된 비밀번호 입니다";
   }
   return error;
-}
-
-/** 학번 입력값에서 모든 공백을 제거합니다. */
-function normalizeStudentId(raw: string): string {
-  return raw.replace(/\s/g, "");
-}
-
-function validateStudentId(raw: string): string | null {
-  const sid = normalizeStudentId(raw);
-
-  if (!sid) {
-    return "학번을 입력해 주세요.";
-  }
-  if (!STUDENT_ID_NUMERIC.test(sid)) {
-    return "학번은 숫자만 입력 가능합니다.";
-  }
-  if (sid.length < STUDENT_ID_MIN_LENGTH) {
-    return "학번은 7자리 이상 입력해주세요";
-  }
-  return null;
 }
 
 /** '한국대'처럼 마지막 글자가 '대'이고 그 앞에 한 글자 이상 있어야 합니다. */

@@ -10,6 +10,10 @@ import {
   normalizeUserId,
 } from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import {
+  normalizeStudentId,
+  validateStudentId,
+} from "@/lib/student-id-validation";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -363,18 +367,21 @@ export default function MainView() {
     setSearchError(null);
     setCreateChatError(null);
 
-    const studentId = searchStudentId.trim();
-    const universityName = searchUniversityName.trim();
-
-    if (!studentId) {
-      setSearchError("학번을 입력해 주세요.");
+    const studentIdError = validateStudentId(searchStudentId);
+    if (studentIdError) {
+      setSearchError(studentIdError);
       return;
     }
+
+    const studentId = normalizeStudentId(searchStudentId);
+    const universityName = searchUniversityName.trim();
+
     if (!universityName) {
       setSearchError("학교 이름을 입력해 주세요.");
       return;
     }
 
+    setSearchStudentId(studentId);
     setSearchPending(true);
     void (async () => {
       try {
