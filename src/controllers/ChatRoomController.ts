@@ -2,12 +2,15 @@ import type { Message } from "@/domain/message/Message";
 import { MessageFactory } from "@/domain/message/MessageFactory";
 import type { ChatRoom } from "@/entities/ChatRoom";
 import type { ChatRoomListItemDTO } from "@/entities/ChatRoomListItem";
+import type { InviteDTO } from "@/entities/InviteDTO";
 import type { ParticipantsDTO } from "@/entities/Participants";
 import type { ChatMessagePayload } from "@/lib/message-payload";
+import { systemMessageToPayload } from "@/lib/message-payload";
 import {
   broadcastMessageToRoom,
   broadcastPayloadToRoom,
 } from "@/lib/message-broadcast";
+import { formatInviteWelcomeContent } from "@/lib/invite-welcome";
 import { normalizeUserId } from "@/lib/presence-channel";
 import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -105,6 +108,155 @@ export class ChatRoomController {
     }
 
     return chatRoom.roomId;
+  }
+
+  /**
+   * 채팅방에 사용자를 초대하고 초대 알림·시스템 메시지를 브로드캐스트합니다.
+   */
+  async inviteUser(
+    roomId: string,
+    inviterId: string,
+    inviteeIdList: string[]
+  ): Promise<InviteDTO[]> {
+    const normalizedRoomId = roomId.trim();
+    const normalizedInviterId = normalizeUserId(inviterId);
+    const inviteeIds = [
+      ...new Set(
+        inviteeIdList.map((id) => normalizeUserId(id)).filter(Boolean)
+      ),
+    ].filter((id) => id !== normalizedInviterId);
+
+    if (!normalizedRoomId || !normalizedInviterId) {
+      throw new Error("roomId and inviterId are required");
+    }
+    if (inviteeIds.length === 0) {
+      throw new Error("inviteeIdList must contain at least one user");
+    }
+
+    const participants =
+      await this.repository.findParticipantsByRoomId(normalizedRoomId);
+    const isInviterMember = participants.some(
+      (p) => p.userId === normalizedInviterId
+    );
+    if (!isInviterMember) {
+      throw new Error("Not a participant of this chat room");
+    }
+
+    const existingIds = new Set(participants.map((p) => p.userId));
+    const newInviteeIds = inviteeIds.filter((id) => !existingIds.has(id));
+    if (newInviteeIds.length === 0) {
+      throw new Error("All selected users are already in this chat room");
+    }
+
+    const inserted = await this.repository.insertParticipant(
+      normalizedRoomId,
+      newInviteeIds
+    );
+    if (inserted.length === 0) {
+      throw new Error("Failed to add invitees to the chat room");
+    }
+
+    const inviterUsers = await this.userRepository.getUserInfo([
+      normalizedInviterId,
+    ]);
+    const inviter = inviterUsers[0];
+    const inviterName =
+      inviter?.name?.trim() || inviter?.studentId?.trim() || "알 수 없음";
+
+    const inviteeUsers = await this.userRepository.getUserInfo(
+      inserted.map((p) => p.userId)
+    );
+    const inviteeById = new Map(inviteeUsers.map((user) => [user.userId, user]));
+    const inviteeNameById = new Map(
+      inviteeUsers.map((user) => [
+        user.userId,
+        user.name?.trim() || user.studentId?.trim() || "알 수 없음",
+      ])
+    );
+
+    const invites: InviteDTO[] = inserted.map((participant) => ({
+      roomId: normalizedRoomId,
+      inviterName,
+      inviteeId: participant.userId,
+    }));
+
+    try {
+      await broadcastInviteToRoom(
+        inserted.map((p) => p.userId),
+        {
+          roomId: normalizedRoomId,
+          inviterUserId: normalizedInviterId,
+          inviterName,
+        }
+      );
+    } catch (e) {
+      console.error("[ChatRoomController.inviteUser] invite broadcast failed", e);
+    }
+
+    for (const participant of inserted) {
+      const invitee = inviteeById.get(participant.userId);
+      const inviteeName =
+        inviteeNameById.get(participant.userId) ?? "알 수 없음";
+      const systemMessage = MessageFactory.createSystemMessage(
+        "INVITE",
+        `${inviteeName}님이 초대되었습니다.`
+      );
+      const payload: ChatMessagePayload = {
+        ...systemMessageToPayload(systemMessage, normalizedRoomId),
+        membershipUserId: participant.userId,
+        membershipUserName: inviteeName,
+        membershipStudentId: invitee?.studentId?.trim() ?? "",
+      };
+      try {
+        await broadcastPayloadToRoom(normalizedRoomId, payload);
+      } catch (e) {
+        console.error(
+          "[ChatRoomController.inviteUser] system message broadcast failed",
+          e
+        );
+      }
+    }
+
+    return invites;
+  }
+
+  /**
+   * 초대를 수락해 입장한 사용자의 입장 시스템 메시지를 채팅방 전체에 브로드캐스트합니다.
+   */
+  async announceInviteeEntry(
+    roomId: string,
+    userId: string
+  ): Promise<ChatMessagePayload> {
+    const normalizedRoomId = roomId.trim();
+    const normalizedUserId = normalizeUserId(userId);
+
+    if (!normalizedRoomId || !normalizedUserId) {
+      throw new Error("roomId and userId are required");
+    }
+
+    const participants =
+      await this.repository.findParticipantsByRoomId(normalizedRoomId);
+    const isMember = participants.some((p) => p.userId === normalizedUserId);
+    if (!isMember) {
+      throw new Error("Not a participant of this chat room");
+    }
+
+    const users = await this.userRepository.getUserInfo([normalizedUserId]);
+    const user = users[0];
+    const userName =
+      user?.name?.trim() || user?.studentId?.trim() || "알 수 없음";
+    const content = formatInviteWelcomeContent(userName);
+
+    const systemMessage = MessageFactory.createSystemMessage("JOIN", content);
+    const payload: ChatMessagePayload = {
+      ...systemMessageToPayload(systemMessage, normalizedRoomId),
+      membershipUserId: normalizedUserId,
+      membershipUserName: userName,
+      membershipStudentId: user?.studentId?.trim() ?? "",
+    };
+
+    await broadcastPayloadToRoom(normalizedRoomId, payload);
+    return payload;
   }
 
   /** 본인이 참여 중인 채팅방 목록과 상대 참가자 정보를 반환합니다. */

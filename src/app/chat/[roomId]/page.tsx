@@ -2,15 +2,21 @@
 
 import type { FileInfoDTO } from "@/entities/FileInfoDTO";
 import type { ParticipantsDTO } from "@/entities/Participants";
-import type { SessionUserDTO } from "@/entities/User";
+import type { SessionUserDTO, UserSearchResultDTO } from "@/entities/User";
 import { readRoomMessages } from "@/lib/chat-room-messages-storage";
+import { formatInviteWelcomeContent } from "@/lib/invite-welcome";
 import type { ChatMessagePayload } from "@/lib/message-payload";
 import { downloadFileFromUrl } from "@/lib/supabase-file-download";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { validateFile } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const INVITE_SUCCESS_TOAST_MS = 4_000;
+
+const inviteInputClassName =
+  "h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400";
 
 function formatTodayDateLabel(): string {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -76,6 +82,35 @@ function readStoredToken(): string | null {
   }
 }
 
+function participantFromMembershipMessage(
+  message: ChatMessagePayload
+): ParticipantsDTO | null {
+  if (message.type !== "system") return null;
+  if (message.actionType !== "INVITE" && message.actionType !== "JOIN") {
+    return null;
+  }
+
+  const userId = message.membershipUserId?.trim();
+  if (!userId) return null;
+
+  return {
+    userId,
+    name: message.membershipUserName?.trim() || "알 수 없음",
+    studentId: message.membershipStudentId?.trim() || "",
+  };
+}
+
+function mergeParticipantList(
+  prev: ParticipantsDTO[],
+  incoming: ParticipantsDTO
+): ParticipantsDTO[] {
+  const index = prev.findIndex((p) => p.userId === incoming.userId);
+  if (index === -1) return [...prev, incoming];
+  const next = [...prev];
+  next[index] = { ...next[index], ...incoming };
+  return next;
+}
+
 function resolveSenderName(
   senderId: string,
   currentUser: SessionUserDTO | null,
@@ -131,6 +166,7 @@ export default function ChatView({
     receiveMessage,
     leaveRoomAndCleanup,
     refreshRooms,
+    consumePendingInviteEntry,
   } = useGlobalSocket();
 
   const [participants, setParticipants] = useState<ParticipantsDTO[]>([]);
@@ -152,13 +188,55 @@ export default function ChatView({
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [leavePending, setLeavePending] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteSearchStudentId, setInviteSearchStudentId] = useState("");
+  const [inviteSearchUniversityName, setInviteSearchUniversityName] =
+    useState("");
+  const [inviteSearchPending, setInviteSearchPending] = useState(false);
+  const [inviteSearchError, setInviteSearchError] = useState<string | null>(
+    null
+  );
+  const [inviteSearchResults, setInviteSearchResults] = useState<
+    UserSearchResultDTO[]
+  >([]);
+  const [inviteSelectedUserIds, setInviteSelectedUserIds] = useState<string[]>(
+    []
+  );
+  const [invitePending, setInvitePending] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccessToast, setInviteSuccessToast] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastMembershipSyncIdRef = useRef<string | null>(null);
 
   const leaveUi = roomLeaveUi[roomId];
   const chatDisabled = leaveUi?.chatDisabled ?? false;
 
   const totalParticipantCount = participants.length + 1;
+
+  const participantIdSet = useMemo(
+    () => new Set(participants.map((p) => p.userId)),
+    [participants]
+  );
+
+  const inviteSelectedUsers = useMemo(
+    () =>
+      inviteSelectedUserIds
+        .map((id) => inviteSearchResults.find((u) => u.userId === id))
+        .filter((u): u is UserSearchResultDTO => u != null),
+    [inviteSelectedUserIds, inviteSearchResults]
+  );
+
+  const inviteVisibleUsers = useMemo(
+    () =>
+      inviteSearchResults.filter(
+        (u) =>
+          u.userId !== currentUser?.userId && !participantIdSet.has(u.userId)
+      ),
+    [inviteSearchResults, currentUser, participantIdSet]
+  );
 
   const headerTitle = leaveUi?.partnerUnknown
     ? "(알 수 없음)"
@@ -375,10 +453,253 @@ export default function ChatView({
     chatDisabled,
   ]);
 
+  const reloadParticipants = useCallback(async (): Promise<void> => {
+    const token = readStoredToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(
+        `/api/chat?roomId=${encodeURIComponent(roomId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      let data: {
+        ok?: boolean;
+        participants?: ParticipantsDTO[];
+      } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+      if (res.ok && data.ok && Array.isArray(data.participants)) {
+        setParticipants(data.participants);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [roomId]);
+
+  function openInviteModal(): void {
+    setInviteError(null);
+    setInviteSearchError(null);
+    setInviteSearchStudentId("");
+    setInviteSearchResults([]);
+    setInviteSelectedUserIds([]);
+    setInviteSearchUniversityName(currentUser?.universityName ?? "");
+    setInviteModalOpen(true);
+  }
+
+  function toggleInviteUserSelection(user: UserSearchResultDTO): void {
+    setInviteError(null);
+    setInviteSelectedUserIds((prev) => {
+      if (prev.includes(user.userId)) {
+        return prev.filter((id) => id !== user.userId);
+      }
+      if (!user.isOnline) return prev;
+      return [...prev, user.userId];
+    });
+  }
+
+  function mergeInviteSearchResult(result: UserSearchResultDTO): void {
+    setInviteSearchResults((prev) => {
+      const index = prev.findIndex((u) => u.userId === result.userId);
+      if (index === -1) return [...prev, result];
+      const next = [...prev];
+      next[index] = result;
+      return next;
+    });
+  }
+
+  function requestInviteSearch(): void {
+    setInviteSearchError(null);
+    setInviteError(null);
+
+    const studentId = inviteSearchStudentId.trim();
+    const universityName = inviteSearchUniversityName.trim();
+
+    if (!studentId) {
+      setInviteSearchError("학번을 입력해 주세요.");
+      return;
+    }
+    if (!universityName) {
+      setInviteSearchError("학교 이름을 입력해 주세요.");
+      return;
+    }
+
+    setInviteSearchPending(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentId, universityName }),
+        });
+
+        let data: {
+          ok?: boolean;
+          result?: UserSearchResultDTO;
+          error?: string;
+        } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+
+        if (res.status === 404) {
+          setInviteSearchError(data.error ?? "해당 사용자가 없습니다.");
+          return;
+        }
+
+        if (!res.ok || !data.ok || !data.result) {
+          setInviteSearchError(
+            typeof data.error === "string"
+              ? data.error
+              : "검색에 실패했습니다. 잠시 후 다시 시도해 주세요."
+          );
+          return;
+        }
+
+        mergeInviteSearchResult(data.result);
+      } catch {
+        setInviteSearchError("네트워크 오류가 발생했습니다.");
+      } finally {
+        setInviteSearchPending(false);
+      }
+    })();
+  }
+
+  const requestInviteFriends = useCallback(async (): Promise<void> => {
+    if (inviteSelectedUserIds.length === 0 || invitePending) return;
+
+    const token = readStoredToken();
+    if (!token || !currentUser) {
+      router.replace("/login");
+      return;
+    }
+
+    setInvitePending(true);
+    setInviteError(null);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "invite",
+          roomId,
+          inviterId: currentUser.userId,
+          inviteeIdList: inviteSelectedUserIds,
+        }),
+      });
+
+      let data: { ok?: boolean; error?: string } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+
+      if (!res.ok) {
+        setInviteError(
+          typeof data.error === "string"
+            ? data.error
+            : "친구 초대에 실패했습니다."
+        );
+        return;
+      }
+
+      setInviteModalOpen(false);
+      setInviteSelectedUserIds([]);
+      setInviteSearchResults([]);
+      setInviteSuccessToast(true);
+      await reloadParticipants();
+      refreshRooms();
+    } catch {
+      setInviteError("네트워크 오류가 발생했습니다.");
+    } finally {
+      setInvitePending(false);
+    }
+  }, [
+    inviteSelectedUserIds,
+    invitePending,
+    currentUser,
+    roomId,
+    router,
+    reloadParticipants,
+    refreshRooms,
+  ]);
+
   useEffect(() => {
     const user = readStoredUser();
     if (user) setCurrentUser(user);
   }, []);
+
+  useEffect(() => {
+    if (!inviteSuccessToast) return;
+    const timeoutId = window.setTimeout(() => {
+      setInviteSuccessToast(false);
+    }, INVITE_SUCCESS_TOAST_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [inviteSuccessToast]);
+
+  useEffect(() => {
+    const pendingRoomId = consumePendingInviteEntry();
+    if (!pendingRoomId || pendingRoomId !== roomId) return;
+
+    const user = readStoredUser();
+    if (!user) return;
+
+    const welcomeContent = formatInviteWelcomeContent(user.name ?? "");
+    const stored = readRoomMessages(roomId);
+    const alreadyShown = stored.some(
+      (m) =>
+        m.type === "system" &&
+        m.actionType === "JOIN" &&
+        m.content === welcomeContent
+    );
+    if (alreadyShown) return;
+
+    const token = readStoredToken();
+    if (!token) return;
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action: "enter", roomId }),
+        });
+
+        let data: {
+          ok?: boolean;
+          message?: ChatMessagePayload;
+          error?: string;
+        } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+
+        if (!res.ok || !data.ok || !data.message) return;
+
+        receiveMessage(roomId, data.message);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [roomId, consumePendingInviteEntry, receiveMessage]);
+
+  useEffect(() => {
+    lastMembershipSyncIdRef.current = null;
+  }, [roomId]);
 
   useEffect(() => {
     void ensureRoomChannel(roomId);
@@ -389,6 +710,68 @@ export default function ChatView({
     const live = getRoomMessages(roomId);
     setTransientMessageList(mergeMessages(stored, live));
   }, [roomId, roomMessages, getRoomMessages]);
+
+  useEffect(() => {
+    const messages = mergeMessages(
+      readRoomMessages(roomId),
+      getRoomMessages(roomId)
+    );
+
+    setParticipants((prev) => {
+      let current = prev;
+      for (const message of messages) {
+        const fromMembership = participantFromMembershipMessage(message);
+        if (fromMembership) {
+          current = mergeParticipantList(current, fromMembership);
+        }
+      }
+
+      if (
+        current.length === prev.length &&
+        current.every(
+          (p, i) =>
+            p.userId === prev[i]?.userId &&
+            p.name === prev[i]?.name &&
+            p.studentId === prev[i]?.studentId
+        )
+      ) {
+        return prev;
+      }
+      return current;
+    });
+
+    const latestMembership = [...messages]
+      .reverse()
+      .find(
+        (m) =>
+          m.type === "system" &&
+          (m.actionType === "INVITE" || m.actionType === "JOIN")
+      );
+
+    if (!latestMembership) return;
+    if (lastMembershipSyncIdRef.current === latestMembership.id) return;
+
+    lastMembershipSyncIdRef.current = latestMembership.id;
+    void reloadParticipants();
+  }, [roomId, roomMessages, getRoomMessages, reloadParticipants]);
+
+  useEffect(() => {
+    const myUserId = currentUser?.userId;
+    if (!myUserId) return;
+
+    const participantIds = new Set(participants.map((p) => p.userId));
+    const hasUnknownSender = transientMessageList.some(
+      (m) =>
+        (m.type === "text" || m.type === "file") &&
+        m.senderId &&
+        m.senderId !== myUserId &&
+        !participantIds.has(m.senderId)
+    );
+
+    if (hasUnknownSender) {
+      void reloadParticipants();
+    }
+  }, [transientMessageList, participants, currentUser, reloadParticipants]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -841,6 +1224,7 @@ export default function ChatView({
 
           <button
             type="button"
+            onClick={openInviteModal}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50"
           >
             <svg
@@ -857,7 +1241,7 @@ export default function ChatView({
                 d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
               />
             </svg>
-            친구 초대하기
+            친구 초대
           </button>
 
           <button
@@ -885,6 +1269,210 @@ export default function ChatView({
           </button>
         </div>
       </aside>
+
+      {inviteSuccessToast && (
+        <div
+          className="fixed bottom-6 right-6 z-[70] rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 shadow-lg"
+          role="status"
+          aria-live="polite"
+        >
+          초대가 완료되었습니다.
+        </div>
+      )}
+
+      {inviteModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invite-dialog-title"
+        >
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4">
+              <h2
+                id="invite-dialog-title"
+                className="text-lg font-bold text-zinc-900"
+              >
+                친구 초대
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!invitePending) setInviteModalOpen(false);
+                }}
+                disabled={invitePending}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 disabled:opacity-60"
+                aria-label="닫기"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  requestInviteSearch();
+                }}
+                className="flex flex-col gap-3"
+              >
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-zinc-700">
+                    학교
+                  </span>
+                  <input
+                    value={inviteSearchUniversityName}
+                    onChange={(e) =>
+                      setInviteSearchUniversityName(e.target.value)
+                    }
+                    autoComplete="organization"
+                    placeholder="ex) 한국대"
+                    className={inviteInputClassName}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-zinc-700">
+                    학번
+                  </span>
+                  <input
+                    value={inviteSearchStudentId}
+                    onChange={(e) => setInviteSearchStudentId(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="ex) 20260001"
+                    className={inviteInputClassName}
+                  />
+                </label>
+                {inviteSearchError && (
+                  <p className="text-sm text-red-600">{inviteSearchError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={inviteSearchPending}
+                  className="flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+                >
+                  {inviteSearchPending ? "검색 중…" : "검색"}
+                </button>
+              </form>
+
+              {inviteSelectedUsers.length > 0 && (
+                <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-3">
+                  <span className="text-sm font-medium text-zinc-700">
+                    {inviteSelectedUsers.length}명 선택됨
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {inviteSelectedUsers.map((user) => (
+                      <span
+                        key={user.userId}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white"
+                      >
+                        {user.name}
+                      </span>
+                    ))}
+                  </div>
+                  {inviteError && (
+                    <p className="text-sm text-red-600">{inviteError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void requestInviteFriends()}
+                    disabled={invitePending}
+                    className="flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+                  >
+                    {invitePending ? "초대 중…" : "초대하기"}
+                  </button>
+                </section>
+              )}
+
+              <ul className="flex flex-col gap-2">
+                {inviteSearchPending && inviteVisibleUsers.length === 0 && (
+                  <li className="rounded-xl px-4 py-6 text-center text-sm text-zinc-500">
+                    검색 중…
+                  </li>
+                )}
+                {!inviteSearchPending && inviteVisibleUsers.length === 0 && (
+                  <li className="rounded-xl px-4 py-6 text-center text-sm text-zinc-500">
+                    학번과 학교명으로 검색해 주세요.
+                  </li>
+                )}
+                {inviteVisibleUsers.map((user) => {
+                  const isSelected = inviteSelectedUserIds.includes(
+                    user.userId
+                  );
+                  const canSelect = user.isOnline || isSelected;
+                  return (
+                    <li key={user.userId}>
+                      <button
+                        type="button"
+                        onClick={() => toggleInviteUserSelection(user)}
+                        disabled={!canSelect}
+                        className={`flex w-full items-center gap-3 rounded-xl border-2 bg-white px-4 py-3 text-left transition-colors ${
+                          isSelected
+                            ? "border-sky-400 bg-sky-50/80"
+                            : "border-transparent hover:border-zinc-200"
+                        } ${!canSelect ? "cursor-not-allowed opacity-60" : ""}`}
+                      >
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
+                            isSelected
+                              ? "border-zinc-900 bg-zinc-900"
+                              : "border-zinc-300 bg-white"
+                          }`}
+                          aria-hidden
+                        >
+                          {isSelected && (
+                            <svg
+                              className="h-3 w-3 text-white"
+                              viewBox="0 0 12 12"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                d="M2 6l3 3 5-5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="relative shrink-0">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
+                            {nameInitial(user.name)}
+                          </span>
+                          {user.isOnline && (
+                            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold text-zinc-900">
+                            {user.name}
+                          </span>
+                          <span className="mt-0.5 block text-sm text-zinc-500">
+                            {user.studentId} | {user.universityName}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {leaveModalOpen && (
         <div

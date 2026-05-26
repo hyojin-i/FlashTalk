@@ -120,6 +120,7 @@ export default function MainView() {
     roomLeaveUi,
     refreshRooms,
     disconnectAllSockets,
+    setPendingInviteEntryRoomId,
   } = useGlobalSocket();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const handleInviteBroadcastRef = useRef<(payload: unknown) => void>(() => {});
@@ -726,7 +727,7 @@ export default function MainView() {
                 className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 <ChatBubbleIcon />
-                {createChatPending ? "생성 중…" : "대화 시작"}
+                {createChatPending ? "생성 중…" : "대화시작"}
               </button>
             </div>
           </section>
@@ -842,6 +843,7 @@ export default function MainView() {
               onClick={() => {
                 const { roomId } = inviteToast;
                 setInviteToast(null);
+                setPendingInviteEntryRoomId(roomId);
                 navigateToChatView(roomId);
               }}
               className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"

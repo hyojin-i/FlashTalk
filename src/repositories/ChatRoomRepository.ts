@@ -217,18 +217,28 @@ export class ChatRoomRepository {
     }
   }
 
-  /** `RoomParticipant` 테이블에 참가자 목록을 추가합니다. */
-  async insertParticipant(roomId: string, userIdList: string[]): Promise<void> {
+  /** `RoomParticipant` 테이블에 참가자 목록을 추가하고 생성된 행을 반환합니다. */
+  async insertParticipant(
+    roomId: string,
+    userIdList: string[]
+  ): Promise<RoomParticipant[]> {
+    const normalizedRoomId = roomId.trim();
+    const ids = [
+      ...new Set(userIdList.map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (ids.length === 0) return [];
+
     const joinedAt = new Date().toISOString();
-    const participants = userIdList.map((userId) => ({
-      roomId,
+    const participants = ids.map((userId) => ({
+      roomId: normalizedRoomId,
       userId,
       joinedAt,
     }));
 
-    const { error: participantError } = await ChatRoomRepository.db
+    const { data, error: participantError } = await ChatRoomRepository.db
       .from("RoomParticipant")
-      .insert(participants);
+      .insert(participants)
+      .select("ParticipantId, userId, roomId, joinedAt");
 
     if (participantError) {
       console.error(
@@ -237,5 +247,12 @@ export class ChatRoomRepository {
       );
       throw new Error(participantError.message);
     }
+
+    return (data ?? []).map((row) => ({
+      ParticipantId: String(row.ParticipantId ?? ""),
+      userId: row.userId as string,
+      roomId: row.roomId as string,
+      joinedAt: new Date(row.joinedAt as string),
+    }));
   }
 }

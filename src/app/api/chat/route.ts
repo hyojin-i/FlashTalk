@@ -61,6 +61,78 @@ export async function POST(request: Request) {
     const sendContent =
       typeof body.content === "string" ? body.content : "";
 
+    if (action === "enter" && sendRoomId) {
+      try {
+        const message = await chatRoomController.announceInviteeEntry(
+          sendRoomId,
+          hostUserId
+        );
+        return NextResponse.json(
+          {
+            ok: true,
+            message: {
+              ...message,
+              roomId: sendRoomId,
+            },
+          },
+          { status: 200 }
+        );
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Failed to announce room entry";
+        const status =
+          message.includes("Not a participant") ||
+          message.includes("required")
+            ? 400
+            : 500;
+        return NextResponse.json({ ok: false, error: message }, { status });
+      }
+    }
+
+    if (action === "invite" && sendRoomId) {
+      const rawInvitees = body.inviteeIdList;
+      if (!Array.isArray(rawInvitees)) {
+        return NextResponse.json(
+          { ok: false, error: "inviteeIdList array is required" },
+          { status: 400 }
+        );
+      }
+
+      const inviteeIdList = rawInvitees.filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0
+      );
+      const inviterId =
+        typeof body.inviterId === "string" && body.inviterId.trim()
+          ? body.inviterId.trim()
+          : hostUserId;
+
+      if (inviterId !== hostUserId) {
+        return NextResponse.json(
+          { ok: false, error: "inviterId must match authenticated user" },
+          { status: 403 }
+        );
+      }
+
+      try {
+        const invites = await chatRoomController.inviteUser(
+          sendRoomId,
+          inviterId,
+          inviteeIdList
+        );
+        return NextResponse.json({ ok: true, invites }, { status: 200 });
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Failed to invite users";
+        const status =
+          message.includes("Not a participant") ||
+          message.includes("required") ||
+          message.includes("already in")
+            ? 400
+            : 500;
+        return NextResponse.json({ ok: false, error: message }, { status });
+      }
+    }
+
     if (action === "leave" && sendRoomId) {
       try {
         await chatRoomController.leaveRoom(sendRoomId, hostUserId);

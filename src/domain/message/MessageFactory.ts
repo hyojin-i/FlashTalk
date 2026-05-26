@@ -1,5 +1,6 @@
 import type { FileInfoDTO } from "@/entities/FileInfoDTO";
 import { Message } from "./Message";
+import { SystemMessage, type SystemActionType } from "./SystemMessage";
 import { TextMessage } from "./TextMessage";
 import { FileMessage } from "./FileMessage";
 
@@ -71,5 +72,17 @@ export class MessageFactory {
     }
 
     throw new Error("Unsupported message type");
+  }
+
+  static createSystemMessage(
+    actionType: SystemActionType,
+    content?: string
+  ): SystemMessage {
+    return new SystemMessage(
+      crypto.randomUUID(),
+      new Date(),
+      actionType,
+      content
+    );
   }
 }

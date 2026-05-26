@@ -1,8 +1,10 @@
 import { Message } from "@/domain/message/Message";
+import { SystemMessage } from "@/domain/message/SystemMessage";
+import type { SystemActionType as DomainSystemActionType } from "@/domain/message/SystemMessage";
 import { TextMessage } from "@/domain/message/TextMessage";
 import { FileMessage } from "@/domain/message/FileMessage";
 
-export type SystemActionType = "USER_LEFT";
+export type SystemActionType = DomainSystemActionType;
 
 export type ChatMessagePayload = {
   roomId?: string;
@@ -18,7 +20,27 @@ export type ChatMessagePayload = {
   leftUserId?: string;
   leftUserName?: string;
   remainingCount?: number;
+  /** User who joined via INVITE / JOIN (for participant list sync on other clients). */
+  membershipUserId?: string;
+  membershipUserName?: string;
+  membershipStudentId?: string;
 };
+
+export function systemMessageToPayload(
+  message: SystemMessage,
+  roomId?: string
+): ChatMessagePayload {
+  const { actionType, content } = message.getContent();
+  return {
+    id: message.id,
+    senderId: "",
+    createdAt: message.createdAt.toISOString(),
+    type: "system",
+    content,
+    actionType,
+    roomId: roomId?.trim(),
+  };
+}
 
 export function messageToPayload(message: Message): ChatMessagePayload {
   if (message instanceof TextMessage) {

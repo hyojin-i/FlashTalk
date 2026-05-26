@@ -67,6 +67,10 @@ type GlobalSocketContextValue = {
   leaveRoomAndCleanup: (roomId: string) => Promise<void>;
   /** Logout step 3: release all Realtime channels and reset in-memory state. */
   disconnectAllSockets: () => Promise<void>;
+  /** Procedure 9.1: invitee accepted toast and navigates to chat. */
+  setPendingInviteEntryRoomId: (roomId: string | null) => void;
+  /** Procedure 9.2–9.5: read once and clear the pending invite entry flag. */
+  consumePendingInviteEntry: () => string | null;
 };
 
 const GlobalSocketContext = createContext<GlobalSocketContextValue | null>(
@@ -161,8 +165,19 @@ export function GlobalSocketProvider({
   const currentUserIdRef = useRef<string | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const pageVisibleRef = useRef(readPageVisible());
+  const pendingInviteEntryRoomIdRef = useRef<string | null>(null);
 
   activeRoomIdRef.current = activeRoomId;
+
+  const setPendingInviteEntryRoomId = useCallback((roomId: string | null) => {
+    pendingInviteEntryRoomIdRef.current = roomId?.trim() || null;
+  }, []);
+
+  const consumePendingInviteEntry = useCallback((): string | null => {
+    const roomId = pendingInviteEntryRoomIdRef.current;
+    pendingInviteEntryRoomIdRef.current = null;
+    return roomId;
+  }, []);
 
   const ingestMessage = useCallback((roomId: string, raw: unknown) => {
     const unwrapped = unwrapBroadcastPayload(raw);
@@ -593,6 +608,8 @@ export function GlobalSocketProvider({
       getRoomMessages,
       leaveRoomAndCleanup,
       disconnectAllSockets,
+      setPendingInviteEntryRoomId,
+      consumePendingInviteEntry,
     }),
     [
       roomMessages,
@@ -606,6 +623,8 @@ export function GlobalSocketProvider({
       getRoomMessages,
       leaveRoomAndCleanup,
       disconnectAllSockets,
+      setPendingInviteEntryRoomId,
+      consumePendingInviteEntry,
     ]
   );
 
