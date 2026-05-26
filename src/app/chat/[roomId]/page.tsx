@@ -22,6 +22,9 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const INVITE_SUCCESS_TOAST_MS = 4_000;
 const PARTICIPANT_PRESENCE_POLL_MS = 60 * 1000;
+const MAX_MESSAGE_LENGTH = 1000;
+const MESSAGE_LENGTH_ERROR =
+  "메시지는 최대 1000자까지 보낼 수 있습니다.";
 
 function hasChannelPresence(channel: RealtimeChannel): boolean {
   return Object.keys(channel.presenceState()).length > 0;
@@ -328,6 +331,11 @@ export default function ChatView({
     const trimmed = currentMessage.trim();
     const fileToSend = attachedFile;
     if ((!trimmed && !fileToSend) || isLoading || chatDisabled) return;
+
+    if (trimmed.length >= MAX_MESSAGE_LENGTH) {
+      setSendError(MESSAGE_LENGTH_ERROR);
+      return;
+    }
 
     const token = readStoredToken();
     if (!token) {

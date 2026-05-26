@@ -31,6 +31,7 @@ import {
 } from "react";
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000;
+const PRESENCE_HEARTBEAT_MS = 3 * 60 * 1000;
 
 function readPageVisible(): boolean {
   if (typeof document === "undefined") return true;
@@ -97,6 +98,40 @@ function readStoredToken(): string | null {
     return token && token.length > 0 ? token : null;
   } catch {
     return null;
+  }
+}
+
+function isAuthenticatedRoute(pathname: string | null): boolean {
+  return Boolean(pathname && !pathname.startsWith("/login"));
+}
+
+async function postPresenceOnline(token: string): Promise<void> {
+  try {
+    await fetch("/api/presence", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ isOnline: true }),
+    });
+  } catch (error) {
+    console.warn("[GlobalSocketProvider] set presence online failed", error);
+  }
+}
+
+async function postPresenceHeartbeat(token: string): Promise<void> {
+  try {
+    await fetch("/api/presence", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ heartbeat: true }),
+    });
+  } catch (error) {
+    console.warn("[GlobalSocketProvider] presence heartbeat failed", error);
   }
 }
 
@@ -554,9 +589,13 @@ export function GlobalSocketProvider({
     const handleVisibilityChange = () => {
       const visible = document.visibilityState === "visible";
       pageVisibleRef.current = visible;
-      if (visible) {
-        void reconnectVisibleRooms();
+      if (!visible) return;
+
+      const token = readStoredToken();
+      if (token && isAuthenticatedRoute(pathname)) {
+        void postPresenceOnline(token);
       }
+      void reconnectVisibleRooms();
     };
 
     pageVisibleRef.current = readPageVisible();
@@ -564,7 +603,21 @@ export function GlobalSocketProvider({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [reconnectVisibleRooms]);
+  }, [pathname, reconnectVisibleRooms]);
+
+  useEffect(() => {
+    if (!isAuthenticatedRoute(pathname)) return;
+
+    const sendHeartbeat = () => {
+      const token = readStoredToken();
+      if (!token) return;
+      void postPresenceHeartbeat(token);
+    };
+
+    sendHeartbeat();
+    const intervalId = window.setInterval(sendHeartbeat, PRESENCE_HEARTBEAT_MS);
+    return () => window.clearInterval(intervalId);
+  }, [pathname]);
 
   useEffect(() => {
     const user = readStoredUser();
