@@ -201,28 +201,39 @@ export default function MainView() {
         )
         .subscribe(async (status, err) => {
           if (cancelled) return;
-          if (status === "CHANNEL_ERROR") {
-            const message =
-              err instanceof Error ? err.message : String(err ?? "");
-            console.error("[MainView] realtime channel error", err);
-            if (
-              message.includes("JwtSignature") ||
-              message.includes("JWT")
-            ) {
-              try {
-                sessionStorage.removeItem(CLIENT_JWT_KEY);
-                sessionStorage.removeItem(CLIENT_USER_KEY);
-              } catch {
-                /* ignore */
+
+          if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT" ||
+            status === "CLOSED"
+          ) {
+            console.warn("[MainView] realtime channel error", status, err);
+            if (status === "CHANNEL_ERROR") {
+              const message =
+                err instanceof Error ? err.message : String(err ?? "");
+              if (
+                message.includes("JwtSignature") ||
+                message.includes("JWT")
+              ) {
+                try {
+                  sessionStorage.removeItem(CLIENT_JWT_KEY);
+                  sessionStorage.removeItem(CLIENT_USER_KEY);
+                } catch {
+                  /* ignore */
+                }
+                router.replace("/login?error=session_expired");
               }
-              router.replace(
-                "/login?error=session_expired"
-              );
             }
             return;
           }
+
           if (status !== "SUBSCRIBED") return;
-          await channel.track({ isOnline: true, userId });
+
+          try {
+            await channel.track({ isOnline: true, userId });
+          } catch (trackErr) {
+            console.warn("[MainView] presence track failed", trackErr);
+          }
         });
 
       heartbeatId = window.setInterval(() => {
@@ -234,11 +245,21 @@ export default function MainView() {
       cancelled = true;
       if (heartbeatId !== undefined) window.clearInterval(heartbeatId);
       const ch = channelRef.current;
-      if (ch) {
-        void ch.untrack();
-        void supabase.removeChannel(ch);
-        channelRef.current = null;
-      }
+      channelRef.current = null;
+      if (!ch) return;
+
+      void (async () => {
+        try {
+          await ch.untrack();
+        } catch (untrackErr) {
+          console.warn("[MainView] cleanup untrack failed", untrackErr);
+        }
+        try {
+          await supabase.removeChannel(ch);
+        } catch (removeErr) {
+          console.warn("[MainView] cleanup removeChannel failed", removeErr);
+        }
+      })();
     };
   }, [router]);
 

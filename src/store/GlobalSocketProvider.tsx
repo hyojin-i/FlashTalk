@@ -349,17 +349,14 @@ export function GlobalSocketProvider({
 
         let subscribedOk = false;
 
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           const timeoutId = setTimeout(() => {
-            if (!pageVisibleRef.current) {
-              resolve();
-              return;
-            }
-            reject(
-              new Error(
+            if (pageVisibleRef.current) {
+              console.warn(
                 `[GlobalSocketProvider] subscribe timeout: ${normalizedId}`
-              )
-            );
+              );
+            }
+            resolve();
           }, SUBSCRIBE_TIMEOUT_MS);
 
           channel.subscribe((status, err) => {
@@ -375,16 +372,13 @@ export function GlobalSocketProvider({
               status === "CLOSED"
             ) {
               clearTimeout(timeoutId);
-              if (!pageVisibleRef.current) {
-                resolve();
-                return;
+              if (pageVisibleRef.current) {
+                console.warn(
+                  `[GlobalSocketProvider] subscribe ${status}: ${normalizedId}`,
+                  err
+                );
               }
-              reject(
-                err ??
-                  new Error(
-                    `[GlobalSocketProvider] subscribe ${status}: ${normalizedId}`
-                  )
-              );
+              resolve();
             }
           });
         });
