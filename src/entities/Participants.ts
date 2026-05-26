@@ -3,4 +3,5 @@ export interface ParticipantsDTO {
   userId: string;
   studentId: string;
   name: string;
+  isOnline: boolean;
 }

@@ -16,6 +16,7 @@ import { broadcastInviteToRoom } from "@/lib/room-invite-broadcast";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { ChatRoomRepository } from "@/repositories/ChatRoomRepository";
 import { FileInfoRepository } from "@/repositories/FileInfoRepository";
+import { UserPresenceRepository } from "@/repositories/UserPresenceRepository";
 import { UserRepository } from "@/repositories/UserRepository";
 
 const DEFAULT_STORAGE_BUCKET = "flashtalk-files";
@@ -32,7 +33,8 @@ export class ChatRoomController {
   constructor(
     private readonly repository: ChatRoomRepository = new ChatRoomRepository(),
     private readonly userRepository: UserRepository = new UserRepository(),
-    private readonly fileInfoRepository: FileInfoRepository = new FileInfoRepository()
+    private readonly fileInfoRepository: FileInfoRepository = new FileInfoRepository(),
+    private readonly presenceRepository: UserPresenceRepository = new UserPresenceRepository()
   ) {}
 
   private storageBucketName(): string {
@@ -292,11 +294,14 @@ export class ChatRoomController {
     }
 
     const users = await this.userRepository.getUserInfo(targetUserIds);
+    const onlineByUserId =
+      await this.presenceRepository.findOnlineStatusByUserIds(targetUserIds);
 
     return users.map((user) => ({
       userId: user.userId,
       studentId: user.studentId,
       name: user.name?.trim() || user.studentId,
+      isOnline: onlineByUserId.get(user.userId) ?? false,
     }));
   }
 

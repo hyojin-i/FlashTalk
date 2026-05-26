@@ -134,6 +134,31 @@ export class UserPresenceRepository {
     return this.attachPresenceToUsers(userRows as User[]);
   }
 
+  /** 여러 사용자의 `isOnline` 상태를 조회합니다. */
+  async findOnlineStatusByUserIds(
+    userIds: string[]
+  ): Promise<Map<string, boolean>> {
+    const ids = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+    if (ids.length === 0) return new Map();
+
+    const { data: presenceRows, error: presenceError } =
+      await UserPresenceRepository.db
+        .from("UserPresence")
+        .select("userId, isOnline")
+        .in("userId", ids);
+
+    if (presenceError) throw new Error(presenceError.message);
+
+    const statusByUserId = new Map<string, boolean>();
+    for (const id of ids) {
+      statusByUserId.set(id, false);
+    }
+    for (const row of presenceRows ?? []) {
+      statusByUserId.set(row.userId as string, row.isOnline === true);
+    }
+    return statusByUserId;
+  }
+
   private async attachPresenceToUsers(users: User[]): Promise<UserWithPresence[]> {
     const userIds = users.map((u) => u.userId);
     const { data: presenceRows, error: presenceError } =

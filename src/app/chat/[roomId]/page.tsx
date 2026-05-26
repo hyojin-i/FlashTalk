@@ -7,17 +7,25 @@ import { readRoomMessages } from "@/lib/chat-room-messages-storage";
 import { formatInviteWelcomeContent } from "@/lib/invite-welcome";
 import type { ChatMessagePayload } from "@/lib/message-payload";
 import { downloadFileFromUrl } from "@/lib/supabase-file-download";
+import { createUserPresenceChannel } from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import {
   normalizeStudentId,
   validateStudentId,
 } from "@/lib/student-id-validation";
+import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { validateFile } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const INVITE_SUCCESS_TOAST_MS = 4_000;
+const PARTICIPANT_PRESENCE_POLL_MS = 60 * 1000;
+
+function hasChannelPresence(channel: RealtimeChannel): boolean {
+  return Object.keys(channel.presenceState()).length > 0;
+}
 
 const inviteInputClassName =
   "h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400";
@@ -101,6 +109,7 @@ function participantFromMembershipMessage(
     userId,
     name: message.membershipUserName?.trim() || "알 수 없음",
     studentId: message.membershipStudentId?.trim() || "",
+    isOnline: false,
   };
 }
 
@@ -211,9 +220,12 @@ export default function ChatView({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccessToast, setInviteSuccessToast] = useState(false);
 
+  const [livePresence, setLivePresence] = useState<Record<string, boolean>>({});
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMembershipSyncIdRef = useRef<string | null>(null);
+  const presenceChannelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
 
   const leaveUi = roomLeaveUi[roomId];
   const chatDisabled = leaveUi?.chatDisabled ?? false;
@@ -482,6 +494,95 @@ export default function ChatView({
       /* ignore */
     }
   }, [roomId]);
+
+  const syncParticipantLivePresence = useCallback(
+    (userId: string, channel: RealtimeChannel) => {
+      const online = hasChannelPresence(channel);
+      setLivePresence((prev) => {
+        if (prev[userId] === online) return prev;
+        return { ...prev, [userId]: online };
+      });
+    },
+    []
+  );
+
+  const isParticipantOnline = useCallback(
+    (participant: ParticipantsDTO): boolean => {
+      if (livePresence[participant.userId] === true) {
+        return true;
+      }
+      return participant.isOnline;
+    },
+    [livePresence]
+  );
+
+  useEffect(() => {
+    const supabase = getBrowserSupabaseClient();
+    const participantIds = new Set(participants.map((p) => p.userId));
+    const channels = presenceChannelsRef.current;
+
+    for (const [userId, channel] of channels) {
+      if (!participantIds.has(userId)) {
+        void supabase.removeChannel(channel);
+        channels.delete(userId);
+        setLivePresence((prev) => {
+          if (!(userId in prev)) return prev;
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+      }
+    }
+
+    for (const participant of participants) {
+      if (channels.has(participant.userId)) continue;
+
+      const channel = createUserPresenceChannel(supabase, participant.userId);
+      channels.set(participant.userId, channel);
+
+      const userId = participant.userId;
+      const applyPresence = () => syncParticipantLivePresence(userId, channel);
+
+      channel
+        .on("presence", { event: "sync" }, applyPresence)
+        .on("presence", { event: "join" }, applyPresence)
+        .on("presence", { event: "leave" }, applyPresence)
+        .subscribe((status, err) => {
+          if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT" ||
+            status === "CLOSED"
+          ) {
+            console.warn(
+              "[ChatView] participant presence channel error",
+              status,
+              err
+            );
+            return;
+          }
+          if (status === "SUBSCRIBED") {
+            applyPresence();
+          }
+        });
+    }
+
+    return () => {
+      for (const channel of channels.values()) {
+        void supabase.removeChannel(channel);
+      }
+      channels.clear();
+    };
+  }, [participants, syncParticipantLivePresence]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const intervalId = window.setInterval(() => {
+      void reloadParticipants();
+    }, PARTICIPANT_PRESENCE_POLL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [roomId, reloadParticipants]);
 
   function openInviteModal(): void {
     setInviteError(null);
@@ -1200,28 +1301,46 @@ export default function ChatView({
 
           <ul className="flex flex-col gap-3">
             <li className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
-                {currentUser ? nameInitial(currentUser.name) : "나"}
+              <span className="relative shrink-0">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
+                  {currentUser ? nameInitial(currentUser.name) : "나"}
+                </span>
+                <span
+                  className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500"
+                  aria-hidden
+                />
               </span>
-              <span className="text-sm font-medium text-zinc-900">나</span>
+              <span className="min-w-0 flex-1 text-sm text-zinc-800">
+                <span className="font-medium text-zinc-900">나</span>
+                <span className="mt-0.5 block text-xs text-emerald-600">
+                  온라인
+                </span>
+              </span>
             </li>
-            {participants.map((p) => (
-              <li key={p.userId} className="flex items-center gap-3">
-                <span className="relative shrink-0">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
-                    {nameInitial(p.name)}
+            {participants.map((p) => {
+              const online = isParticipantOnline(p);
+              return (
+                <li key={p.userId} className="flex items-center gap-3">
+                  <span className="relative shrink-0">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
+                      {nameInitial(p.name)}
+                    </span>
+                    <span
+                      className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
+                        online ? "bg-emerald-500" : "bg-zinc-400"
+                      }`}
+                      aria-hidden
+                    />
                   </span>
-                  <span
-                    className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500"
-                    aria-hidden
-                  />
-                </span>
-                <span className="text-sm text-zinc-800">
-                  {p.name}{" "}
-                  <span className="text-zinc-500">({p.studentId})</span>
-                </span>
-              </li>
-            ))}
+                  <span className="min-w-0 flex-1 text-sm text-zinc-800">
+                    <span className="font-medium text-zinc-900">{p.name}</span>
+                    <span className="mt-0.5 block text-xs text-zinc-500">
+                      {p.studentId} · {online ? "온라인" : "오프라인"}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
             {participantsLoading && participants.length === 0 && (
               <li className="text-sm text-zinc-500">불러오는 중…</li>
             )}
