@@ -8,6 +8,51 @@ type Step = "lookup" | "login" | "register";
 
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 
+const STUDENT_ID_MIN_LENGTH = 7;
+const STUDENT_ID_NUMERIC = /^\d+$/;
+const NAME_HAS_DIGIT = /\d/;
+const PASSWORD_HAS_SPECIAL = /[^A-Za-z0-9]/;
+
+function mapLoginErrorMessage(error: string): string {
+  if (error === "Invalid password") {
+    return "잘못된 비밀번호 입니다";
+  }
+  return error;
+}
+
+/** 학번 입력값에서 모든 공백을 제거합니다. */
+function normalizeStudentId(raw: string): string {
+  return raw.replace(/\s/g, "");
+}
+
+function validateStudentId(raw: string): string | null {
+  const sid = normalizeStudentId(raw);
+
+  if (!sid) {
+    return "학번을 입력해 주세요.";
+  }
+  if (!STUDENT_ID_NUMERIC.test(sid)) {
+    return "학번은 숫자만 입력 가능합니다.";
+  }
+  if (sid.length < STUDENT_ID_MIN_LENGTH) {
+    return "학번은 7자리 이상 입력해주세요";
+  }
+  return null;
+}
+
+/** '한국대'처럼 마지막 글자가 '대'이고 그 앞에 한 글자 이상 있어야 합니다. */
+function validateUniversityName(raw: string): string | null {
+  const uni = raw.trim();
+
+  if (!uni) {
+    return "학교 이름을 입력해 주세요.";
+  }
+  if (!/.+대$/.test(uni)) {
+    return "학교 명은 '한국대'와 같은 형식으로 입력해주세요";
+  }
+  return null;
+}
+
 export default function SignUpLoginView() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("lookup");
@@ -29,14 +74,14 @@ export default function SignUpLoginView() {
    * Returns whether the user is already registered (`User` row exists).
    * On HTTP/network failure, sets `lookupError` and throws so the step stays on lookup.
    */
-  async function verifyUser(): Promise<boolean> {
+  async function verifyUser(sid: string, uni: string): Promise<boolean> {
     setLookupError(null);
     setLookupPending(true);
     try {
       const res = await fetch("/api/users/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, universityName }),
+        body: JSON.stringify({ studentId: sid, universityName: uni }),
       });
       let data: { exists?: boolean } = {};
       try {
@@ -62,8 +107,26 @@ export default function SignUpLoginView() {
 
   async function handleNext(e: React.FormEvent) {
     e.preventDefault();
+    setLookupError(null);
+
+    const sid = normalizeStudentId(studentId);
+    const uni = universityName.trim();
+
+    const studentIdError = validateStudentId(studentId);
+    if (studentIdError) {
+      setLookupError(studentIdError);
+      return;
+    }
+    const universityNameError = validateUniversityName(universityName);
+    if (universityNameError) {
+      setLookupError(universityNameError);
+      return;
+    }
+
+    setStudentId(sid);
+
     try {
-      const exists = await verifyUser();
+      const exists = await verifyUser(sid, uni);
       setStep(exists ? "login" : "register");
     } catch {
       /* `lookupError` already set in verifyUser */
@@ -78,28 +141,39 @@ export default function SignUpLoginView() {
   async function requestSignUp(): Promise<void> {
     setSignUpError(null);
 
-    const sid = studentId.trim();
+    const sid = normalizeStudentId(studentId);
     const uni = universityName.trim();
     const nm = registerName.trim();
     const pw = registerPassword;
 
-    if (!sid) {
-      setSignUpError("학번을 입력해 주세요.");
+    const studentIdError = validateStudentId(studentId);
+    if (studentIdError) {
+      setSignUpError(studentIdError);
       return;
     }
     if (!nm) {
       setSignUpError("이름을 입력해 주세요.");
       return;
     }
-    if (!uni) {
-      setSignUpError("학교 이름을 입력해 주세요.");
+    const universityNameError = validateUniversityName(universityName);
+    if (universityNameError) {
+      setSignUpError(universityNameError);
+      return;
+    }
+    if (NAME_HAS_DIGIT.test(nm)) {
+      setSignUpError("이름에 숫자는 입력할 수 없습니다");
       return;
     }
     if (pw.length < 8) {
       setSignUpError("비밀번호는 8자 이상 입력해 주세요.");
       return;
     }
+    if (!PASSWORD_HAS_SPECIAL.test(pw)) {
+      setSignUpError("비밀번호에 특수문자를 하나 이상 포함해야 합니다.");
+      return;
+    }
 
+    setStudentId(sid);
     setSignUpPending(true);
     try {
       const res = await fetch("/api/users/signup", {
@@ -150,16 +224,18 @@ export default function SignUpLoginView() {
   function requestLogin(): void {
     setLoginError(null);
 
-    const sid = studentId.trim();
+    const sid = normalizeStudentId(studentId);
     const uni = universityName.trim();
     const pw = loginPassword;
 
-    if (!sid) {
-      setLoginError("학번을 입력해 주세요.");
+    const studentIdError = validateStudentId(studentId);
+    if (studentIdError) {
+      setLoginError(studentIdError);
       return;
     }
-    if (!uni) {
-      setLoginError("학교 이름을 입력해 주세요.");
+    const universityNameError = validateUniversityName(universityName);
+    if (universityNameError) {
+      setLoginError(universityNameError);
       return;
     }
     if (!pw) {
@@ -167,6 +243,7 @@ export default function SignUpLoginView() {
       return;
     }
 
+    setStudentId(sid);
     setLoginPending(true);
     void (async () => {
       try {
@@ -206,7 +283,7 @@ export default function SignUpLoginView() {
         ) {
           setLoginError(
             typeof data.error === "string"
-              ? data.error
+              ? mapLoginErrorMessage(data.error)
               : "로그인에 실패했습니다. 정보를 확인해 주세요."
           );
           return;
