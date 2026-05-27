@@ -140,7 +140,7 @@ export default function MainView() {
   const [searchPending, setSearchPending] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<UserSearchResultDTO[]>([]);
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<UserSearchResultDTO[]>([]);
 
   const [createChatPending, setCreateChatPending] = useState(false);
   const [createChatError, setCreateChatError] = useState<string | null>(null);
@@ -154,14 +154,6 @@ export default function MainView() {
     roomId: string;
     inviterName: string;
   } | null>(null);
-
-  const selectedUsers = useMemo(
-    () =>
-      selectedUserIds
-        .map((id) => searchResults.find((u) => u.userId === id))
-        .filter((u): u is UserSearchResultDTO => u != null),
-    [selectedUserIds, searchResults]
-  );
 
   const visibleUsers = useMemo(
     () =>
@@ -339,28 +331,27 @@ export default function MainView() {
 
   function toggleUserSelection(user: UserSearchResultDTO): void {
     setCreateChatError(null);
-    setSelectedUserIds((prev) => {
-      if (prev.includes(user.userId)) {
-        return prev.filter((id) => id !== user.userId);
+    setSelectedUsers((prev) => {
+      if (prev.some((u) => u.userId === user.userId)) {
+        return prev.filter((u) => u.userId !== user.userId);
       }
       if (!user.isOnline) return prev;
-      return [...prev, user.userId];
+      return [...prev, user];
     });
   }
 
-  function deselectLastUser(): void {
+  function deselectUser(userId: string): void {
     setCreateChatError(null);
-    setSelectedUserIds((prev) => prev.slice(0, -1));
+    setSelectedUsers((prev) => prev.filter((u) => u.userId !== userId));
   }
 
-  function mergeSearchResult(result: UserSearchResultDTO): void {
-    setSearchResults((prev) => {
-      const index = prev.findIndex((u) => u.userId === result.userId);
-      if (index === -1) return [...prev, result];
-      const next = [...prev];
-      next[index] = result;
-      return next;
-    });
+  function clearAllSelectedUsers(): void {
+    setCreateChatError(null);
+    setSelectedUsers([]);
+  }
+
+  function setLatestSearchResult(result: UserSearchResultDTO): void {
+    setSearchResults([result]);
   }
 
   function requestSearchUser(): void {
@@ -416,7 +407,7 @@ export default function MainView() {
           return;
         }
 
-        mergeSearchResult(data.result);
+        setLatestSearchResult(data.result);
       } catch {
         setSearchError("네트워크 오류가 발생했습니다.");
       } finally {
@@ -466,12 +457,14 @@ export default function MainView() {
   }
 
   function handleStartChat(): void {
-    if (selectedUserIds.length === 0 || createChatPending) return;
+    if (selectedUsers.length === 0 || createChatPending) return;
     setCreateChatError(null);
     setCreateChatPending(true);
     void (async () => {
       try {
-        const roomId = await requestCreateChatRoom(selectedUserIds);
+        const roomId = await requestCreateChatRoom(
+          selectedUsers.map((u) => u.userId)
+        );
         if (roomId) {
           loadChatRoomList();
           navigateToChatView(roomId);
@@ -538,7 +531,7 @@ export default function MainView() {
     }
   }
 
-  const selectionCount = selectedUserIds.length;
+  const selectionCount = selectedUsers.length;
   const showCreationBox = selectionCount > 0;
 
   return (
@@ -720,15 +713,35 @@ export default function MainView() {
                 {selectedUsers.map((user) => (
                   <span
                     key={user.userId}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 py-1.5 pl-3 pr-1.2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
                   >
                     <span
-                      className={`h-2 w-2 rounded-full ${
+                      className={`h-2 w-2 shrink-0 rounded-full ${
                         user.isOnline ? "bg-emerald-400" : "bg-zinc-400"
                       }`}
                       aria-hidden
                     />
                     {user.name}
+                    <button
+                      type="button"
+                      onClick={() => deselectUser(user.userId)}
+                      className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/20 hover:text-white dark:text-zinc-900/90 dark:hover:bg-zinc-900/10 dark:hover:text-zinc-900"
+                      aria-label={`${user.name} 선택 해제`}
+                    >
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          d="M3 3l6 6M9 3L3 9"
+                        />
+                      </svg>
+                    </button>
                   </span>
                 ))}
               </div>
@@ -742,7 +755,7 @@ export default function MainView() {
             <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
               <button
                 type="button"
-                onClick={deselectLastUser}
+                onClick={clearAllSelectedUsers}
                 disabled={selectionCount === 0}
                 className="rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
               >
@@ -774,7 +787,9 @@ export default function MainView() {
               </li>
             )}
             {visibleUsers.map((user) => {
-              const isSelected = selectedUserIds.includes(user.userId);
+              const isSelected = selectedUsers.some(
+                (u) => u.userId === user.userId
+              );
               const canSelect = user.isOnline || isSelected;
               return (
                 <li key={user.userId}>
