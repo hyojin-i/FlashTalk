@@ -17,6 +17,10 @@ import {
   unwrapBroadcastPayload,
 } from "@/lib/message-payload";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import {
+  ensureBrowserRealtimeAuth,
+  resetBrowserRealtimeAuth,
+} from "@/lib/supabase-realtime-auth";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
@@ -197,6 +201,7 @@ export function GlobalSocketProvider({
   const channelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
   const subscribedRoomIdsRef = useRef<string[]>([]);
   const subscribingRef = useRef<Map<string, Promise<void>>>(new Map());
+  const closingRoomIdsRef = useRef<Set<string>>(new Set());
   const currentUserIdRef = useRef<string | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const pageVisibleRef = useRef(readPageVisible());
@@ -348,8 +353,25 @@ export function GlobalSocketProvider({
     channelsRef.current.clear();
     subscribingRef.current.clear();
     subscribedRoomIdsRef.current = [];
+    closingRoomIdsRef.current.clear();
+    resetBrowserRealtimeAuth();
     resetGlobalState();
   }, [resetGlobalState]);
+
+  const removeRoomChannel = useCallback(
+    async (supabase: ReturnType<typeof getBrowserSupabaseClient>, roomId: string) => {
+      const ch = channelsRef.current.get(roomId);
+      if (!ch) return;
+      closingRoomIdsRef.current.add(roomId);
+      channelsRef.current.delete(roomId);
+      try {
+        await supabase.removeChannel(ch);
+      } finally {
+        closingRoomIdsRef.current.delete(roomId);
+      }
+    },
+    []
+  );
 
   const subscribeToRoom = useCallback(
     async (roomId: string): Promise<void> => {
@@ -368,67 +390,85 @@ export function GlobalSocketProvider({
 
       const supabase = getBrowserSupabaseClient();
       const task = (async () => {
-        const channel = createChatRoomChannel(supabase, normalizedId);
-        channel.on(
-          "broadcast",
-          { event: CHAT_MESSAGE_EVENT },
-          ({ payload }) => {
-            const unwrapped = unwrapBroadcastPayload(payload);
-            if (isSystemMessagePayload(unwrapped)) {
-              ingestSystemMessage(normalizedId, unwrapped);
-              return;
-            }
-            ingestMessage(normalizedId, payload);
-          }
-        );
+        await ensureBrowserRealtimeAuth(supabase);
 
-        let subscribedOk = false;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (!pageVisibleRef.current) return;
+          if (channelsRef.current.has(normalizedId)) return;
 
-        await new Promise<void>((resolve) => {
-          const timeoutId = setTimeout(() => {
-            if (pageVisibleRef.current) {
-              console.warn(
-                `[GlobalSocketProvider] subscribe timeout: ${normalizedId}`
-              );
+          const channel = createChatRoomChannel(supabase, normalizedId);
+          channel.on(
+            "broadcast",
+            { event: CHAT_MESSAGE_EVENT },
+            ({ payload }) => {
+              const unwrapped = unwrapBroadcastPayload(payload);
+              if (isSystemMessagePayload(unwrapped)) {
+                ingestSystemMessage(normalizedId, unwrapped);
+                return;
+              }
+              ingestMessage(normalizedId, payload);
             }
-            resolve();
-          }, SUBSCRIBE_TIMEOUT_MS);
+          );
 
-          channel.subscribe((status, err) => {
-            if (status === "SUBSCRIBED") {
-              clearTimeout(timeoutId);
-              subscribedOk = true;
-              resolve();
-              return;
-            }
-            if (
-              status === "CHANNEL_ERROR" ||
-              status === "TIMED_OUT" ||
-              status === "CLOSED"
-            ) {
-              clearTimeout(timeoutId);
+          let subscribedOk = false;
+
+          await new Promise<void>((resolve) => {
+            const timeoutId = setTimeout(() => {
               if (pageVisibleRef.current) {
                 console.warn(
-                  `[GlobalSocketProvider] subscribe ${status}: ${normalizedId}`,
-                  err
+                  `[GlobalSocketProvider] subscribe timeout: ${normalizedId}`
                 );
               }
               resolve();
-            }
+            }, SUBSCRIBE_TIMEOUT_MS);
+
+            channel.subscribe((status, err) => {
+              if (status === "SUBSCRIBED") {
+                clearTimeout(timeoutId);
+                subscribedOk = true;
+                resolve();
+                return;
+              }
+              if (
+                status === "CHANNEL_ERROR" ||
+                status === "TIMED_OUT" ||
+                status === "CLOSED"
+              ) {
+                clearTimeout(timeoutId);
+                const intentionalClose =
+                  closingRoomIdsRef.current.has(normalizedId);
+                if (pageVisibleRef.current && !intentionalClose) {
+                  console.warn(
+                    `[GlobalSocketProvider] subscribe ${status}: ${normalizedId}`,
+                    err
+                  );
+                }
+                resolve();
+              }
+            });
           });
-        });
 
-        if (!subscribedOk) {
-          await supabase.removeChannel(channel);
-          return;
-        }
+          if (subscribedOk) {
+            channelsRef.current.set(normalizedId, channel);
+            if (!subscribedRoomIdsRef.current.includes(normalizedId)) {
+              subscribedRoomIdsRef.current = [
+                ...subscribedRoomIdsRef.current,
+                normalizedId,
+              ];
+            }
+            return;
+          }
 
-        channelsRef.current.set(normalizedId, channel);
-        if (!subscribedRoomIdsRef.current.includes(normalizedId)) {
-          subscribedRoomIdsRef.current = [
-            ...subscribedRoomIdsRef.current,
-            normalizedId,
-          ];
+          closingRoomIdsRef.current.add(normalizedId);
+          try {
+            await supabase.removeChannel(channel);
+          } finally {
+            closingRoomIdsRef.current.delete(normalizedId);
+          }
+
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
         }
       })();
 
@@ -436,11 +476,7 @@ export function GlobalSocketProvider({
       try {
         await task;
       } catch (e) {
-        const ch = channelsRef.current.get(normalizedId);
-        if (ch) {
-          await supabase.removeChannel(ch);
-          channelsRef.current.delete(normalizedId);
-        }
+        await removeRoomChannel(supabase, normalizedId);
         if (pageVisibleRef.current) {
           console.error("[GlobalSocketProvider] subscribeToRoom failed", e);
         }
@@ -448,13 +484,14 @@ export function GlobalSocketProvider({
         subscribingRef.current.delete(normalizedId);
       }
     },
-    [ingestMessage, ingestSystemMessage]
+    [ingestMessage, ingestSystemMessage, removeRoomChannel]
   );
 
   const reconnectVisibleRooms = useCallback(async () => {
     if (!pageVisibleRef.current || !readStoredToken()) return;
 
     const supabase = getBrowserSupabaseClient();
+    await ensureBrowserRealtimeAuth(supabase);
     const roomIds = new Set(subscribedRoomIdsRef.current);
     const activeId = activeRoomIdRef.current?.trim();
     if (activeId) roomIds.add(activeId);
@@ -462,27 +499,19 @@ export function GlobalSocketProvider({
     if (roomIds.size === 0) return;
 
     for (const id of roomIds) {
-      const ch = channelsRef.current.get(id);
-      if (ch) {
-        await supabase.removeChannel(ch);
-        channelsRef.current.delete(id);
-      }
       subscribingRef.current.delete(id);
+      await removeRoomChannel(supabase, id);
     }
 
     await Promise.all([...roomIds].map((id) => subscribeToRoom(id)));
-  }, [subscribeToRoom]);
+  }, [subscribeToRoom, removeRoomChannel]);
 
   const leaveRoomAndCleanup = useCallback(async (roomId: string) => {
     const normalizedId = roomId.trim();
     if (!normalizedId) return;
 
     const supabase = getBrowserSupabaseClient();
-    const channel = channelsRef.current.get(normalizedId);
-    if (channel) {
-      await supabase.removeChannel(channel);
-      channelsRef.current.delete(normalizedId);
-    }
+    await removeRoomChannel(supabase, normalizedId);
     subscribingRef.current.delete(normalizedId);
     subscribedRoomIdsRef.current = subscribedRoomIdsRef.current.filter(
       (id) => id !== normalizedId
@@ -514,7 +543,7 @@ export function GlobalSocketProvider({
       delete next[normalizedId];
       return next;
     });
-  }, []);
+  }, [removeRoomChannel]);
 
   const ensureRoomChannel = useCallback(
     (roomId: string) => subscribeToRoom(roomId),
@@ -529,26 +558,27 @@ export function GlobalSocketProvider({
         return;
       }
 
+      await ensureBrowserRealtimeAuth(getBrowserSupabaseClient());
       const supabase = getBrowserSupabaseClient();
+      const activeId = activeRoomIdRef.current?.trim();
       const nextIds = [
-        ...new Set(roomIds.map((id) => id.trim()).filter(Boolean)),
+        ...new Set([
+          ...roomIds.map((id) => id.trim()).filter(Boolean),
+          ...(activeId ? [activeId] : []),
+        ]),
       ];
       const prevIds = subscribedRoomIdsRef.current;
 
       for (const id of prevIds) {
         if (!nextIds.includes(id)) {
-          const ch = channelsRef.current.get(id);
-          if (ch) {
-            await supabase.removeChannel(ch);
-            channelsRef.current.delete(id);
-          }
+          await removeRoomChannel(supabase, id);
         }
       }
 
       await Promise.all(nextIds.map((id) => subscribeToRoom(id)));
       subscribedRoomIdsRef.current = nextIds;
     },
-    [subscribeToRoom, teardownChannels]
+    [subscribeToRoom, teardownChannels, removeRoomChannel]
   );
 
   const refreshRooms = useCallback(() => {

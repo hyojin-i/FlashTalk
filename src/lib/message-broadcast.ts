@@ -2,6 +2,7 @@ import type { Message } from "@/domain/message/Message";
 import {
   CHAT_MESSAGE_EVENT,
   chatRoomChannelName,
+  createChatRoomChannel,
 } from "@/lib/chat-room-channel";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import type { ChatMessagePayload } from "@/lib/message-payload";
@@ -16,7 +17,7 @@ async function sendMessageOnChannel(
   payload: ChatMessagePayload
 ): Promise<void> {
   const channelName = chatRoomChannelName(roomId);
-  const channel = supabase.channel(channelName);
+  const channel = createChatRoomChannel(supabase, roomId);
 
   try {
     await new Promise<void>((resolve, reject) => {

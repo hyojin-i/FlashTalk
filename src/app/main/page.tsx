@@ -15,6 +15,10 @@ import {
   validateStudentId,
 } from "@/lib/student-id-validation";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
+import {
+  ensureBrowserRealtimeAuth,
+  resetBrowserRealtimeAuth,
+} from "@/lib/supabase-realtime-auth";
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
@@ -123,6 +127,7 @@ export default function MainView() {
     unreadCounts,
     roomLeaveUi,
     refreshRooms,
+    ensureRoomChannel,
     disconnectAllSockets,
     setPendingInviteEntryRoomId,
   } = useGlobalSocket();
@@ -178,9 +183,9 @@ export default function MainView() {
     const supabase = getBrowserSupabaseClient();
 
     void (async () => {
-      // Public channel (no `private: true`): subscribe with the anon key.
-      // Calling setAuth() with a JWT that does not match the project's signing key
-      // causes JwtSignatureError on subscribe.
+      if (cancelled) return;
+
+      await ensureBrowserRealtimeAuth(supabase);
       if (cancelled) return;
 
       const userId = normalizeUserId(user.userId);
@@ -466,6 +471,8 @@ export default function MainView() {
           selectedUsers.map((u) => u.userId)
         );
         if (roomId) {
+          await ensureRoomChannel(roomId);
+          refreshRooms();
           loadChatRoomList();
           navigateToChatView(roomId);
         }
@@ -512,6 +519,7 @@ export default function MainView() {
       }
 
       await disconnectAllSockets();
+      resetBrowserRealtimeAuth();
       channelRef.current = null;
 
       try {

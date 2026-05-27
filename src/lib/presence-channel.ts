@@ -23,6 +23,7 @@ export function createUserPresenceChannel(
   return supabase.channel(userPresenceChannelName(id), {
     config: {
       presence: { key: id },
+      broadcast: { ack: false, self: false },
     },
   });
 }

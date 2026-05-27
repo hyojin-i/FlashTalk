@@ -1,4 +1,5 @@
 import {
+  createUserPresenceChannel,
   INVITE_TO_ROOM_EVENT,
   type InviteToRoomPayload,
   userPresenceChannelName,
@@ -14,7 +15,7 @@ async function sendInviteOnChannel(
   payload: InviteToRoomPayload
 ): Promise<void> {
   const channelName = userPresenceChannelName(invitedUserId);
-  const channel = supabase.channel(channelName);
+  const channel = createUserPresenceChannel(supabase, invitedUserId);
 
   try {
     await new Promise<void>((resolve, reject) => {

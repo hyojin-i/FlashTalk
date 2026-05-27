@@ -193,7 +193,7 @@ export async function POST(request: Request) {
 
     const roomId = await chatRoomController.createRoom(userIdList, hostUserId);
 
-    return NextResponse.json({ roomId }, { status: 200 });
+    return NextResponse.json({ ok: true, roomId }, { status: 200 });
   } catch (e) {
     if (e instanceof ChatRoomParticipantRequiredError) {
       return NextResponse.json(

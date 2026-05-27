@@ -12,5 +12,9 @@ export function createChatRoomChannel(
   supabase: SupabaseClient,
   roomId: string
 ): RealtimeChannel {
-  return supabase.channel(chatRoomChannelName(roomId));
+  return supabase.channel(chatRoomChannelName(roomId), {
+    config: {
+      broadcast: { ack: false, self: false },
+    },
+  });
 }

@@ -7,15 +7,12 @@ import { readRoomMessages } from "@/lib/chat-room-messages-storage";
 import { formatInviteWelcomeContent } from "@/lib/invite-welcome";
 import type { ChatMessagePayload } from "@/lib/message-payload";
 import { downloadFileFromUrl } from "@/lib/supabase-file-download";
-import { createUserPresenceChannel } from "@/lib/presence-channel";
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
 import {
   normalizeStudentId,
   validateStudentId,
 } from "@/lib/student-id-validation";
-import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { useGlobalSocket } from "@/store/GlobalSocketProvider";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { validateFile } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,10 +22,6 @@ const PARTICIPANT_PRESENCE_POLL_MS = 60 * 1000;
 const MAX_MESSAGE_LENGTH = 1000;
 const MESSAGE_LENGTH_ERROR =
   "메시지는 최대 1000자까지 보낼 수 있습니다.";
-
-function hasChannelPresence(channel: RealtimeChannel): boolean {
-  return Object.keys(channel.presenceState()).length > 0;
-}
 
 const inviteInputClassName =
   "h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400";
@@ -223,12 +216,9 @@ export default function ChatView({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccessToast, setInviteSuccessToast] = useState(false);
 
-  const [livePresence, setLivePresence] = useState<Record<string, boolean>>({});
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMembershipSyncIdRef = useRef<string | null>(null);
-  const presenceChannelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
 
   const leaveUi = roomLeaveUi[roomId];
   const chatDisabled = leaveUi?.chatDisabled ?? false;
@@ -502,85 +492,6 @@ export default function ChatView({
       /* ignore */
     }
   }, [roomId]);
-
-  const syncParticipantLivePresence = useCallback(
-    (userId: string, channel: RealtimeChannel) => {
-      const online = hasChannelPresence(channel);
-      setLivePresence((prev) => {
-        if (prev[userId] === online) return prev;
-        return { ...prev, [userId]: online };
-      });
-    },
-    []
-  );
-
-  const isParticipantOnline = useCallback(
-    (participant: ParticipantsDTO): boolean => {
-      if (livePresence[participant.userId] === true) {
-        return true;
-      }
-      return participant.isOnline;
-    },
-    [livePresence]
-  );
-
-  useEffect(() => {
-    const supabase = getBrowserSupabaseClient();
-    const participantIds = new Set(participants.map((p) => p.userId));
-    const channels = presenceChannelsRef.current;
-
-    for (const [userId, channel] of channels) {
-      if (!participantIds.has(userId)) {
-        void supabase.removeChannel(channel);
-        channels.delete(userId);
-        setLivePresence((prev) => {
-          if (!(userId in prev)) return prev;
-          const next = { ...prev };
-          delete next[userId];
-          return next;
-        });
-      }
-    }
-
-    for (const participant of participants) {
-      if (channels.has(participant.userId)) continue;
-
-      const channel = createUserPresenceChannel(supabase, participant.userId);
-      channels.set(participant.userId, channel);
-
-      const userId = participant.userId;
-      const applyPresence = () => syncParticipantLivePresence(userId, channel);
-
-      channel
-        .on("presence", { event: "sync" }, applyPresence)
-        .on("presence", { event: "join" }, applyPresence)
-        .on("presence", { event: "leave" }, applyPresence)
-        .subscribe((status, err) => {
-          if (
-            status === "CHANNEL_ERROR" ||
-            status === "TIMED_OUT" ||
-            status === "CLOSED"
-          ) {
-            console.warn(
-              "[ChatView] participant presence channel error",
-              status,
-              err
-            );
-            return;
-          }
-          if (status === "SUBSCRIBED") {
-            applyPresence();
-          }
-        });
-    }
-
-    return () => {
-      for (const channel of channels.values()) {
-        void supabase.removeChannel(channel);
-      }
-      channels.clear();
-    };
-  }, [participants, syncParticipantLivePresence]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -1326,7 +1237,7 @@ export default function ChatView({
               </span>
             </li>
             {participants.map((p) => {
-              const online = isParticipantOnline(p);
+              const online = p.isOnline;
               return (
                 <li key={p.userId} className="flex items-center gap-3">
                   <span className="relative shrink-0">

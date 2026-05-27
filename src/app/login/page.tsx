@@ -7,6 +7,7 @@ import { useState } from "react";
 type Step = "lookup" | "login" | "register";
 
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from "@/lib/session";
+import { resetBrowserRealtimeAuth } from "@/lib/supabase-realtime-auth";
 import {
   normalizeStudentId,
   validateStudentId,
@@ -274,6 +275,7 @@ export default function SignUpLoginView() {
         try {
           sessionStorage.setItem(CLIENT_JWT_KEY, data.token);
           sessionStorage.setItem(CLIENT_USER_KEY, JSON.stringify(data.user));
+          resetBrowserRealtimeAuth();
         } catch {
           /* private mode / disabled storage */
         }
