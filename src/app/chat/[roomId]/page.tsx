@@ -16,6 +16,9 @@ import { useGlobalSocket } from "@/store/GlobalSocketProvider";
 import { validateFile } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { payloadToMessage } from "@/lib/message-payload";
+import ChatBubble from "@/components/map/ChatBubble";
+import AiChatBubble from "@/components/ai/ChatBubble";
 
 const INVITE_SUCCESS_TOAST_MS = 4_000;
 const PARTICIPANT_PRESENCE_POLL_MS = 60 * 1000;
@@ -1008,6 +1011,58 @@ export default function ChatView({
                   </div>
                 </div>
               );
+            }
+
+            if (msg.type === "map") {
+              try {
+                const mapMessageObj = payloadToMessage(msg) as any; 
+                
+                return (
+                  <div key={msg.id} className="w-full flex flex-col mt-2">
+                    {!isMine && <span className="ml-1 mb-1 text-xs font-medium text-zinc-600">{senderName}</span>}
+                    
+                    <div className={`flex w-full items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      {!isMine && <ChatBubble message={mapMessageObj} isMe={false} senderName={senderName} />}
+                      
+                      <span className="text-[11px] text-zinc-400 mb-1 shrink-0">{timeLabel}</span>
+                      
+                      {isMine && <ChatBubble message={mapMessageObj} isMe={true} senderName={senderName} />}
+                    </div>
+                  </div>
+                );
+              } catch (err) {
+                console.error("Failed to render map message:", err);
+                return <div key={msg.id} className="text-xs text-red-500 text-center my-2">오류: 지도 메시지를 불러올 수 없습니다.</div>;
+              }
+            }
+
+            if (msg.type === "ai_prompt") {
+              try {
+                const aiMessageObj = payloadToMessage(msg) as any; 
+                
+                const aiBubbleData = {
+                  prompt: aiMessageObj.prompt,
+                  response: aiMessageObj.response,
+                  model: aiMessageObj.model
+                };
+
+                return (
+                  <div key={msg.id} className="w-full flex flex-col mt-3 mb-1">
+                    {!isMine && <span className="ml-1 mb-1 text-xs font-bold text-zinc-600">{senderName}</span>}
+                    
+                    <div className={`flex w-full items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      {!isMine && <AiChatBubble message={aiBubbleData} isMe={false} senderName={senderName} />}
+                      {!isMine && <span className="text-[11px] font-medium text-zinc-400 mb-1 shrink-0">{timeLabel}</span>}
+                      
+                      {isMine && <span className="text-[11px] font-medium text-zinc-400 mb-1 shrink-0">{timeLabel}</span>}
+                      {isMine && <AiChatBubble message={aiBubbleData} isMe={true} senderName={senderName} />}
+                    </div>
+                  </div>
+                );
+              } catch (err) {
+                console.error("Failed to render AI message:", err);
+                return <div key={msg.id} className="text-xs text-red-500 text-center my-2 border border-red-200 p-2 rounded-lg bg-red-50">오류: AI 메시지를 렌더링할 수 없습니다.</div>;
+              }
             }
 
             if (msg.type !== "text") return null;

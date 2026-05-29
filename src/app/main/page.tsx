@@ -23,6 +23,8 @@ import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import MapSearchView from "@/components/map/MapSearchView";
+import AiQuestionView from "@/components/ai/AIQuestionView";
 
 const PRESENCE_HEARTBEAT_MS = 60 * 1000;
 const INVITE_TOAST_MS = 10 * 1000;
@@ -542,6 +544,62 @@ export default function MainView() {
   const selectionCount = selectedUsers.length;
   const showCreationBox = selectionCount > 0;
 
+  const [globalMapOpen, setGlobalMapOpen] = useState(false);
+  const [globalAiOpen, setGlobalAiOpen] = useState(false);
+
+  const handleSendMapToMultipleRooms = async (roomIds: string[], mapMessage: any) => {
+    const token = readStoredToken();
+    if (!token) return;
+
+    await Promise.all(
+        roomIds.map(async (id) => {
+            try {
+                await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({
+                        roomId: id,
+                        type: "map",
+                        content: JSON.stringify(mapMessage.getContent()) 
+                    }),
+                });
+            } catch (e) {
+                console.error(`${id} 방 전송 실패`, e);
+            }
+        })
+    );
+    loadChatRoomList();
+    alert(`선택한 ${roomIds.length}개의 대화방에 지도를 전송했습니다.`);
+  };
+
+  const handleSendAiToMultipleRooms = async (roomIds: string[], aiMessage: any) => {
+    const token = readStoredToken();
+    if (!token) return;
+
+    let successCount = 0;
+
+    await Promise.all(
+      roomIds.map(async (id) => {
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              roomId: id,
+              type: "ai_prompt",
+              content: aiMessage.getContent() 
+            }),
+          });
+          if (res.ok) successCount++;
+        } catch (e) {
+          console.error(`${id} 방 AI 전송 실패`, e);
+        }
+      })
+    );
+    loadChatRoomList();
+    if (successCount > 0) alert(`선택한 ${successCount}개의 대화방에 AI 결과를 전송했습니다!`);
+  };
+
   return (
     <div className="flex min-h-screen bg-zinc-100 font-sans dark:bg-black">
       <aside
@@ -642,6 +700,18 @@ export default function MainView() {
             <span className="text-xl font-bold tracking-tight text-black dark:text-zinc-50">
               플래시톡
             </span>
+            <button
+            onClick={() => setGlobalMapOpen(true)}
+            className="ml-4 rounded-lg bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-600 flex items-center gap-1.5"
+        >
+            지도 검색 및 공유
+        </button>
+        <button
+            onClick={() => setGlobalAiOpen(true)}
+            className="ml-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 flex items-center gap-1.5 shadow-sm"
+        >
+            AI 프롬프트
+        </button>
           </div>
           <button
             type="button"
@@ -949,6 +1019,23 @@ export default function MainView() {
             </div>
           </div>
         </div>
+      )}
+      {globalMapOpen && (
+          <MapSearchView
+              userId={currentUser?.userId ?? ''}
+              chatRooms={chatRooms} 
+              onClose={() => setGlobalMapOpen(false)}
+              onSendToRooms={handleSendMapToMultipleRooms}
+          />
+      )}
+
+      {globalAiOpen && (
+          <AiQuestionView
+              userId={currentUser?.userId ?? ''}
+              chatRooms={chatRooms} 
+              onClose={() => setGlobalAiOpen(false)}
+              onSendToRooms={handleSendAiToMultipleRooms}
+          />
       )}
     </div>
   );

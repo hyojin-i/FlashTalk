@@ -310,7 +310,7 @@ export class ChatRoomController {
     roomId: string,
     userId: string,
     type: string,
-    content: string
+    content: any
   ): Promise<Message> {
     const normalizedType = type.trim().toLowerCase();
 
@@ -340,6 +340,36 @@ export class ChatRoomController {
       const message = MessageFactory.createMessage(
         "file",
         trimmedContent,
+        userId,
+        roomId
+      );
+
+      await broadcastMessageToRoom(roomId, message);
+      return message;
+    }
+
+    if (normalizedType === "map") {
+      if (!content) {
+        throw new Error("Map Message content is required");
+      }
+      
+      const message = MessageFactory.createMessage(
+        "map",
+        content,
+        userId,
+        roomId
+      );
+
+      await broadcastMessageToRoom(roomId, message);
+      return message;
+    }
+
+    if (normalizedType === "ai_prompt") {
+      if (!content) throw new Error("AI Message content is required");
+      
+      const message = MessageFactory.createMessage(
+        "ai_prompt",
+        content,
         userId,
         roomId
       );

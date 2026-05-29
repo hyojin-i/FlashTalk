@@ -3,6 +3,8 @@ import { SystemMessage } from "@/domain/message/SystemMessage";
 import type { SystemActionType as DomainSystemActionType } from "@/domain/message/SystemMessage";
 import { TextMessage } from "@/domain/message/TextMessage";
 import { FileMessage } from "@/domain/message/FileMessage";
+import { MapMessage } from "@/domain/message/MapMessage";
+import { AiMessage } from "@/domain/message/AiMessage";
 
 export type SystemActionType = DomainSystemActionType;
 
@@ -11,7 +13,7 @@ export type ChatMessagePayload = {
   id: string;
   senderId: string;
   createdAt: string;
-  type: "text" | "file" | "system";
+  type: "text" | "file" | "system" | "map" | "ai_prompt";
   content?: string;
   fileUrl?: string;
   fileName?: string;
@@ -24,6 +26,14 @@ export type ChatMessagePayload = {
   membershipUserId?: string;
   membershipUserName?: string;
   membershipStudentId?: string;
+  placeName?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  mapImageUrl?: string;
+  prompt?: string; 
+  response?: string;
+  model?: string;
 };
 
 export function systemMessageToPayload(
@@ -65,6 +75,32 @@ export function messageToPayload(message: Message): ChatMessagePayload {
     };
   }
 
+  if (message instanceof MapMessage) {
+    return {
+      id: message.id,
+      senderId: message.senderId,
+      createdAt: message.createdAt.toISOString(),
+      type: "map",
+      placeName: message.placeName,
+      address: message.address,
+      latitude: message.latitude,
+      longitude: message.longitude,
+      mapImageUrl: message.mapImageUrl,
+    };
+  }
+  
+  if (message instanceof AiMessage) {
+    return {
+      id: message.id,
+      senderId: message.senderId,
+      createdAt: message.createdAt.toISOString(),
+      type: "ai_prompt",
+      prompt: message.prompt,
+      response: message.aiResponse,
+      model: message.model,
+    };
+  }
+
   throw new Error("Unsupported message type");
 }
 
@@ -86,6 +122,49 @@ export function payloadToMessage(payload: ChatMessagePayload): Message {
       payload.fileUrl ?? "",
       payload.fileName ?? "",
       payload.fileSize ?? 0
+    );
+  }
+  
+   if (payload.type === "map") {
+    let mapData = payload as any;
+    if (payload.content && typeof payload.content === "string" && payload.content.includes("placeName")) {
+        try {
+            const parsedContent = JSON.parse(payload.content);
+            mapData = { ...payload, ...parsedContent };
+        } catch (e) {
+            console.error("Map Message Parse Error:", e);
+        }
+    }
+
+    return new MapMessage(
+      payload.id,
+      payload.senderId,
+      new Date(payload.createdAt),
+      mapData.placeName ?? "알 수 없는 장소",
+      mapData.address ?? "",
+      mapData.latitude ?? 0,
+      mapData.longitude ?? 0,
+      mapData.mapImageUrl ?? "",
+    );
+  }
+
+  if (payload.type === "ai_prompt") {
+    let aiData = payload as any;
+    if (payload.content && typeof payload.content === "string" && payload.content.includes("prompt")) {
+        try {
+            const parsedContent = JSON.parse(payload.content);
+            aiData = { ...payload, ...parsedContent };
+        } catch (e) {
+            console.error("AI Message Parse Error:", e);
+        }
+    }
+    return new AiMessage(
+      payload.id,
+      payload.senderId,
+      new Date(payload.createdAt),
+      aiData.prompt ?? "질문 없음",
+      aiData.response ?? "답변 없음",
+      aiData.model ?? "unknown"
     );
   }
 
@@ -118,7 +197,7 @@ export function isChatMessagePayload(
     typeof o.id === "string" &&
     typeof o.senderId === "string" &&
     typeof o.createdAt === "string" &&
-    (o.type === "text" || o.type === "file")
+    (o.type === "text" || o.type === "file" || o.type === "map" || o.type === "ai_prompt")
   );
 }
 

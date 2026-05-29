@@ -3,6 +3,8 @@ import { Message } from "./Message";
 import { SystemMessage, type SystemActionType } from "./SystemMessage";
 import { TextMessage } from "./TextMessage";
 import { FileMessage } from "./FileMessage";
+import { MapMessage } from "./MapMessage";
+import { AiMessage } from "./AiMessage";
 
 type FileMessagePayload = {
   id?: string;
@@ -12,6 +14,24 @@ type FileMessagePayload = {
   fileName: string;
   fileSize: number;
 };
+
+type MapMessagePayload = {
+  id?: string;
+  senderId?: string;
+  createdAt?: Date;
+  placeName: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  mapImageUrl: string;
+  distanceFromSender?: number;
+};
+
+export interface AiMessagePayload {
+    prompt: string; 
+    response: string; 
+    model: string; 
+}
 
 function parseFileMessagePayload(
   content: string | FileMessagePayload
@@ -42,10 +62,34 @@ function parseFileMessagePayload(
   };
 }
 
+function parseMapMessagePayload(content: string | MapMessagePayload): MapMessagePayload {
+  if (typeof content === "object" && content !== null) return content as MapMessagePayload;
+  try {
+    return JSON.parse(content) as MapMessagePayload;
+  } catch {
+    throw new Error("Invalid map message content");
+  }
+}
+
+function parseAiMessagePayload(content: string | AiMessagePayload): AiMessagePayload {
+  if (typeof content === "object" && content !== null) {
+      return content as AiMessagePayload;
+  }
+  
+  if (typeof content === "string") {
+      try {
+          return JSON.parse(content) as AiMessagePayload;
+      } catch {
+          throw new Error("Invalid AI message JSON content");
+      }
+  }
+  throw new Error("Invalid AI message format");
+}
+
 export class MessageFactory {
   static createMessage(
-    type: "text" | "file",
-    content: string | FileMessagePayload,
+    type: "text" | "file" | "map" | "ai_prompt",
+    content: string | FileMessagePayload | MapMessagePayload | AiMessagePayload,
     userId: string,
     _roomId: string
   ): Message {
@@ -60,7 +104,7 @@ export class MessageFactory {
     }
 
     if (type === "file") {
-      const payload = parseFileMessagePayload(content);
+      const payload = parseFileMessagePayload(content as string | FileMessagePayload);
       return new FileMessage(
         payload.id ?? crypto.randomUUID(),
         payload.senderId ?? userId,
@@ -68,6 +112,34 @@ export class MessageFactory {
         payload.fileUrl,
         payload.fileName,
         payload.fileSize
+      );
+    }
+
+     if (type === "map") {
+      const payload = parseMapMessagePayload(content as string | MapMessagePayload);
+      
+      return new MapMessage(
+        payload.id ?? crypto.randomUUID(),
+        payload.senderId ?? userId,
+        payload.createdAt ? new Date(payload.createdAt) : new Date(),
+        payload.placeName,
+        payload.address,
+        payload.latitude,
+        payload.longitude,
+        payload.mapImageUrl,
+        payload.distanceFromSender
+      );
+    }
+
+    if (type === "ai_prompt") {
+      const payload = parseAiMessagePayload(content as string | AiMessagePayload);
+      return new AiMessage(
+        crypto.randomUUID(), 
+        userId, 
+        new Date(), 
+        payload.prompt,
+        payload.response,
+        payload.model
       );
     }
 

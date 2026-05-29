@@ -1,10 +1,406 @@
-import React from 'react';
+'use client';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { LocationResult } from '@/adapters/map/MapAdapter';
+import { MessageFactory } from '@/domain/message/MessageFactory';
+import type { ChatRoomListItemDTO } from '@/entities/ChatRoomListItem';
+import type { ParticipantsDTO } from '@/entities/Participants';
 
-export default function MapSearchView() {
+function formatChatRoomListTitle(participants: ParticipantsDTO[]): string {
+    const totalParticipants = participants.length + 1;
+    if (participants.length === 0) return "나와의 채팅"; 
+    const names = participants.map((p) => p.name);
+    const othersCount = totalParticipants - 2;
+    if (names.length === 1 || othersCount <= 0) {
+        if (names.length >= 2 && othersCount <= 0) return `${names[0]}, ${names[1]}`;
+        return names[0]; 
+    }
+    return `${names[0]}, ${names[1] ?? names[0]} 외 ${othersCount}명`;
+}
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; 
+    const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+    const dp = (lat2 - lat1) * Math.PI / 180, dl = (lon2 - lon1) * Math.PI / 180; 
+    const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+    return Math.round(R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))));
+}
+
+interface Props { userId: string; chatRooms: ChatRoomListItemDTO[]; onClose: () => void; onSendToRooms: (roomIdList: string[], messagePayload: any) => Promise<void>; }
+
+interface SelectedTarget {
+    type: 'search' | 'myLocation';
+    id: string;
+    placeName: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    distance?: number;
+    mapImageUrl?: string | null;
+}
+
+export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendToRooms }: Props) {
+    const router = useRouter();
+    const [keyword, setKeyword] = useState('');
+    const [isSearched, setIsSearched] = useState(false); 
+    const [results, setResults] = useState<LocationResult[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const [sortMode, setSortMode] = useState<'distance' | 'accuracy' | null>(null);
+
+    const [myCoords, setMyCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [myLocationData, setMyLocationData] = useState<{ address: string; mapImageUrl: string } | null>(null);
+    const [gpsDenied, setGpsDenied] = useState(false);
+    const [gpsLoading, setGpsLoading] = useState(true);
+    
+    const [selectedTarget, setSelectedTarget] = useState<SelectedTarget | null>(null);
+
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
+    const [isSending, setIsSending] = useState(false);
+
+    const updateLocation = useCallback(() => {
+        setGpsLoading(true);
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                    setMyCoords({ lat, lng }); setGpsDenied(false); 
+                    try {
+                        const res = await fetch(`/api/map?action=gps&lat=${lat}&lng=${lng}`);
+                        const data = await res.json();
+                        if (res.ok && data.imageUrl) setMyLocationData({ address: data.address || "현재 위치", mapImageUrl: data.imageUrl });
+                        else setMyLocationData({ address: "현재 위치", mapImageUrl: "" });
+                    } catch (e) { setMyLocationData({ address: "현재 위치", mapImageUrl: "" }); } 
+                    finally { setGpsLoading(false); }
+                }, 
+                () => { 
+                    setGpsDenied(true); setMyCoords(null); setMyLocationData(null); setGpsLoading(false); 
+                }, 
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        } else { setGpsDenied(true); setGpsLoading(false); }
+    }, []);
+
+    useEffect(() => { 
+        updateLocation(); 
+        
+        let permissionStatus: PermissionStatus | null = null;
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'geolocation' }).then(status => {
+                permissionStatus = status;
+                permissionStatus.onchange = () => {
+                    if (permissionStatus?.state === 'granted') updateLocation();
+                    else if (permissionStatus?.state === 'denied') {
+                        setGpsDenied(true); setMyCoords(null); setMyLocationData(null);
+                    }
+                };
+            }).catch(() => {});
+        }
+
+        const handleVisibilityChange = () => { if (document.visibilityState === 'visible') updateLocation(); };
+        const handleFocus = () => updateLocation();
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            if (permissionStatus) permissionStatus.onchange = null;
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [updateLocation]);
+
+    const handleSearch = useCallback(async () => {
+        const rawKeyword = keyword.trim();
+        if (!rawKeyword) {
+            setIsSearched(true); setResults([]); setSelectedTarget(null); setSortMode(null); return;
+        }
+
+        setIsLoading(true); setSelectedTarget(null); setIsSearched(true);
+
+        try {
+            let finalResults: LocationResult[] = [];
+            let isDistanceSort = false;
+
+            if (myCoords && !gpsDenied) {
+                isDistanceSort = true;
+                let searchSuccess = false;
+                const gpsQuery = `&lat=${myCoords.lat}&lng=${myCoords.lng}`;
+
+                if (myLocationData && myLocationData.address && myLocationData.address !== "현재 위치") {
+                    const parts = myLocationData.address.split(' ');
+                    const localArea = parts.length >= 3 ? parts[2] : parts[1] || parts[0];
+                    
+                    if (localArea && !rawKeyword.includes(localArea)) {
+                        const smartKeyword = `${localArea} ${rawKeyword}`;
+                        const res1 = await fetch(`/api/map?action=search&keyword=${encodeURIComponent(smartKeyword)}${gpsQuery}`);
+                        const data1 = await res1.json();
+                        
+                        if (res1.ok && data1.results && data1.results.length > 0) {
+                            finalResults = data1.results;
+                            searchSuccess = true;
+                        }
+                    }
+                }
+
+                if (!searchSuccess) {
+                    const res2 = await fetch(`/api/map?action=search&keyword=${encodeURIComponent(rawKeyword)}${gpsQuery}`);
+                    const data2 = await res2.json();
+                    if (res2.ok && data2.results) {
+                        finalResults = data2.results;
+                    }
+                }
+
+                if (finalResults.length > 0) {
+                    finalResults = finalResults.map((loc: LocationResult) => ({
+                        ...loc,
+                        distance: loc.distance ?? calculateDistance(myCoords.lat, myCoords.lng, loc.latitude, loc.longitude)
+                    })).sort((a: LocationResult, b: LocationResult) => (a.distance || 0) - (b.distance || 0));
+                }
+            } else {
+                isDistanceSort = false;
+                const res = await fetch(`/api/map?action=search&keyword=${encodeURIComponent(rawKeyword)}`);
+                const data = await res.json();
+                if (res.ok && data.results) {
+                    finalResults = data.results;
+                }
+            }
+
+            setSortMode(isDistanceSort ? 'distance' : 'accuracy');
+            setResults(finalResults);
+        } catch { 
+            setResults([]); 
+        } finally { 
+            setIsLoading(false); 
+        }
+    }, [keyword, myCoords, myLocationData, gpsDenied]);
+
+    const handleSearchRef = useRef(handleSearch);
+    handleSearchRef.current = handleSearch;
+    const isFirstRender = useRef(true);
+
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+        if (isSearched && keyword.trim() !== '') {
+            handleSearchRef.current(); 
+        }
+    }, [gpsDenied, myCoords?.lat, myCoords?.lng]); 
+
+    const handleSelectLocation = async (loc: LocationResult) => {
+        setSelectedTarget({
+            type: 'search', id: loc.id, placeName: loc.placeName, address: loc.address,
+            latitude: loc.latitude, longitude: loc.longitude, distance: loc.distance, mapImageUrl: null
+        });
+        try {
+            const res = await fetch(`/api/map?action=image&lat=${loc.latitude}&lng=${loc.longitude}`);
+            const data = await res.json();
+            if (res.ok) {
+                setSelectedTarget(prev => prev?.id === loc.id ? { ...prev, mapImageUrl: data.imageUrl } : prev);
+            }
+        } catch (e) {}
+    };
+
+    const handleSelectMyLocation = () => {
+        if (!myCoords || !myLocationData) return;
+        setSelectedTarget({
+            type: 'myLocation', id: 'my-loc', placeName: myLocationData.address, address: myLocationData.address,
+            latitude: myCoords.lat, longitude: myCoords.lng, distance: 0, mapImageUrl: myLocationData.mapImageUrl
+        });
+    };
+
+    const toggleRoomSelection = (roomId: string) => setSelectedRoomIds(prev => prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId]);
+
+    const executeShare = async () => {
+        if (selectedRoomIds.length === 0 || !selectedTarget) return;
+
+        const mapMsg = MessageFactory.createMessage('map', {
+            placeName: selectedTarget.placeName, address: selectedTarget.address,
+            latitude: selectedTarget.latitude, longitude: selectedTarget.longitude,
+            mapImageUrl: selectedTarget.mapImageUrl || "", distanceFromSender: selectedTarget.distance
+        }, userId, "temp");
+
+        setIsSending(true);
+        try {
+            await onSendToRooms(selectedRoomIds, mapMsg); 
+            setIsSheetOpen(false); setSelectedRoomIds([]); 
+            setSelectedTarget(null); 
+        } finally { setIsSending(false); }
+    };
+
+    const isDefaultMode = !keyword.trim();
+    const isNoResults = isSearched && keyword.trim() && !isLoading && results.length === 0;
+
     return (
-        <div>
-            <h2>Map Search View</h2>
-            {/* 맵 검색 컴포넌트 내용 */}
+        <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-50 animate-slide-up overflow-hidden">
+            <header className="flex items-center h-14 px-4 bg-white border-b shrink-0 shadow-sm z-20">
+                <button onClick={onClose} className="p-2 -ml-2 text-zinc-600 hover:text-black transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <h1 className="text-lg font-bold ml-2 text-zinc-900">장소 검색 및 공유</h1>
+            </header>
+
+            {!selectedTarget ? (
+                <div className="flex-1 flex flex-col overflow-hidden relative bg-white">
+                    <div className={`text-xs px-4 py-1.5 font-bold flex items-center gap-1.5 shrink-0 transition-colors ${gpsDenied ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                        {gpsDenied ? (
+                            <><span className="text-[10px]"></span> 위치 권한 차단됨 (정확도순 검색)</>
+                        ) : (
+                            <><span className="text-[10px]"></span> 내 위치 활성화됨 (거리순 정렬)</>
+                        )}
+                    </div>
+
+                    <div className="p-4 shrink-0 shadow-sm pt-3 z-10">
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" value={keyword} 
+                                onChange={e => { 
+                                    setKeyword(e.target.value); 
+                                    if (e.target.value === '') { setResults([]); setIsSearched(false); setSortMode(null); } 
+                                }} 
+                                onKeyDown={e => e.key === 'Enter' && handleSearch()} 
+                                placeholder="검색어를 입력해주세요." 
+                                className="flex-1 p-3 text-base text-zinc-900 font-medium placeholder-zinc-400 bg-zinc-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" 
+                            />
+                            <button onClick={handleSearch} disabled={isLoading} className="px-6 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors">{isLoading ? "..." : "검색"}</button>
+                        </div>
+                    </div>
+
+                    {isSearched && results.length > 0 && sortMode && (
+                        <div className="bg-slate-50 border-b border-slate-100 p-2 px-4 flex items-center shrink-0">
+                            <span className="text-[11px] font-bold text-slate-500">
+                                {sortMode === 'distance' ? '현재 좌표 기준 가장 가까운 순서' : '정확도 순서'}
+                            </span>
+                        </div>
+                    )}
+
+                    <div className="flex-1 overflow-y-auto pb-4">
+                        {isNoResults ? (
+                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400">
+                                <span className="text-4xl mb-4">🔍</span><span className="text-sm font-medium">검색 결과가 없습니다.</span>
+                            </div>
+                        ) : isDefaultMode && gpsLoading ? (
+                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400"><span className="text-sm font-medium animate-pulse">위치를 찾는 중입니다...</span></div>
+                        ) : isDefaultMode && gpsDenied ? (
+                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400">
+                                <span className="text-4xl mb-4">🚫</span>
+                                <span className="text-sm font-medium text-center text-zinc-500">위치 권한이 차단되었습니다.<br/>기기 설정에서 권한을 켜주시면<br/>자동으로 화면에 반영됩니다.</span>
+                            </div>
+                        ) : isDefaultMode && myLocationData && myCoords ? (
+                            <div onClick={handleSelectMyLocation} className="w-full p-8 bg-indigo-50/50 flex flex-col justify-center items-center border-b border-indigo-100/50 cursor-pointer hover:bg-indigo-100 transition-colors">
+                                <span className="text-xs font-extrabold text-indigo-500 mb-3 bg-white px-4 py-2 rounded-full shadow-sm border border-indigo-100 flex items-center gap-1">📍 현재 내 위치 크게 보기 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg></span>
+                                <span className="text-xl font-bold text-zinc-900 text-center leading-tight break-words px-4">{myLocationData.address}</span>
+                            </div>
+                        ) : (
+                            <ul className="divide-y divide-zinc-100">
+                                {results.map((loc) => (
+                                    <li key={loc.id} onClick={() => handleSelectLocation(loc)} className="p-4 cursor-pointer flex justify-between hover:bg-indigo-50/50 transition-colors border-l-4 border-transparent hover:border-indigo-500">
+                                        <div className="min-w-0 pr-4 flex-1">
+                                            <p className="text-base font-bold text-zinc-900 break-words leading-tight">{loc.placeName}</p>
+                                            <p className="text-sm text-zinc-500 mt-1.5 break-words leading-snug">{loc.address}</p>
+                                        </div>
+                                        <div className="flex flex-col items-end shrink-0 ml-2">
+                                            {loc.distance !== undefined && <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-md h-fit text-slate-600 font-bold whitespace-nowrap">{loc.distance >= 1000 ? `${(loc.distance/1000).toFixed(1)}km` : `${loc.distance}m`}</span>}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="flex-1 flex flex-col bg-white overflow-hidden animate-slide-in-right z-30">
+                    <div className="flex items-center p-4 border-b border-zinc-100 shrink-0 bg-white shadow-sm">
+                        <button onClick={() => setSelectedTarget(null)} className="flex items-center text-zinc-600 hover:text-black font-bold px-2 py-1 bg-zinc-100 rounded-lg transition-colors">
+                            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+                            목록으로 돌아가기
+                        </button>
+                    </div>
+
+                    <div className="flex-1 flex flex-col p-5 overflow-y-auto">
+                        <div className="shrink-0 mb-5">
+                            <span className="text-xs font-bold text-indigo-500 mb-1.5 block">
+                                {selectedTarget.type === 'myLocation' ? '내 위치 상세 정보' : '🔍 검색된 장소 정보'}
+                            </span>
+                            <h2 className="text-2xl font-extrabold text-zinc-900 leading-tight break-words">{selectedTarget.placeName}</h2>
+                            {selectedTarget.type === 'search' && (
+                                <p className="text-base text-zinc-500 mt-2 break-words leading-snug">{selectedTarget.address}</p>
+                            )}
+                            {selectedTarget.distance !== undefined && selectedTarget.type === 'search' && selectedTarget.distance > 0 && (
+                                <span className="inline-block mt-3 text-sm bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold">
+                                    현재 내 위치에서 {selectedTarget.distance >= 1000 ? `${(selectedTarget.distance/1000).toFixed(1)}km` : `${selectedTarget.distance}m`}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex-1 min-h-[350px] w-full bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 relative shadow-inner">
+                            {selectedTarget.mapImageUrl ? (
+                                <img src={selectedTarget.mapImageUrl} className="w-full h-full object-cover" alt="지도 상세" />
+                            ) : (
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-50">
+                                    <span className="text-sm animate-pulse text-slate-400 font-medium">지도 이미지를 불러오는 중...</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-zinc-100 shrink-0 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                        <button onClick={() => setIsSheetOpen(true)} disabled={!selectedTarget.mapImageUrl} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-[0.98] shadow-md shadow-indigo-200">
+                            이 장소 대화방에 공유하기
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {isSheetOpen && selectedTarget && (
+                <div className="absolute inset-0 z-[100] flex flex-col justify-end">
+                    <div className="absolute inset-0 bg-black/50 transition-opacity" onClick={() => setIsSheetOpen(false)} />
+                    <div className="relative bg-white w-full h-[65%] rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
+                        <div className="flex justify-between items-center p-5 border-b shrink-0">
+                            <h3 className="font-bold text-lg text-zinc-900">어느 대화방에 공유할까요?</h3>
+                            <button onClick={() => setIsSheetOpen(false)} className="text-zinc-500 hover:text-black p-1">닫기</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-3">
+                            {chatRooms.length === 0 ? (
+                                <div className="text-center text-zinc-500 py-10 font-medium">참여 중인 대화방이 없습니다.</div>
+                            ) : (
+                                <ul className="flex flex-col gap-2">
+                                    {chatRooms.map(room => {
+                                        const isSelected = selectedRoomIds.includes(room.roomId);
+                                        const title = formatChatRoomListTitle(room.participants);
+                                        return (
+                                            <li key={room.roomId}>
+                                                <button onClick={() => toggleRoomSelection(room.roomId)} className={`w-full flex items-center p-4 rounded-2xl border-2 text-left transition-colors ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-zinc-100 hover:border-zinc-300'}`}>
+                                                    <div className={`w-6 h-6 rounded-md border-2 mr-4 flex items-center justify-center transition-colors ${isSelected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-zinc-300 bg-white'}`}>
+                                                        {isSelected && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 12 12"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 6l3 3 5-5" /></svg>}
+                                                    </div>
+                                                    <span className="font-bold text-zinc-900 text-base flex-1 truncate">{title}</span>
+                                                    <span className="ml-2 text-sm text-zinc-500 shrink-0 bg-zinc-100 px-2 py-0.5 rounded-full">{room.participants.length + 1}명</span>
+                                                </button>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            )}
+                        </div>
+                        {selectedRoomIds.length > 0 && (
+                            <div className="p-5 bg-white border-t shrink-0">
+                                <button onClick={executeShare} disabled={isSending} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl text-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg shadow-indigo-200">
+                                    {isSending ? "전송 중..." : `${selectedRoomIds.length}개 대화방에 전송`}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+            
+            <style jsx>{`
+                .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+            `}</style>
         </div>
     );
 }

@@ -157,12 +157,20 @@ function toLatestPreview(
     };
   }
 
+  let previewText = "";
+  if (message.type === "text") {
+    previewText = message.content ?? "";
+  } else if (message.type === "file") {
+    previewText = message.fileName ?? "파일"
+  } else if (message.type === "map") {
+    previewText = message.placeName ? `🗺️ 위치 공유: ${message.placeName}` : "🗺️ 위치를 공유했습니다.";
+  } else if (message.type === "ai_prompt") { 
+    previewText = message.prompt ? `🤖 AI: ${message.prompt}` : "🤖 AI 답변을 공유했습니다.";
+  }
+
   return {
     roomId,
-    content:
-      message.type === "text"
-        ? (message.content ?? "")
-        : (message.fileName ?? "파일"),
+    content: previewText,
     createdAt: message.createdAt,
     senderId: message.senderId,
   };

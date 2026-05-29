@@ -1,13 +1,39 @@
 import { NextResponse } from 'next/server';
+import { AIController } from '@/controllers/AIController';
 
-export class AIController {
-    // AI 관련 요청 처리 로직
+const aiController = new AIController();
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const { action, prompt, timeout, model } = body;
+
+        if (timeout || model) {
+            aiController.updateSettings(timeout, model);
+        }
+
+        if (action === 'generate') {
+            const response = await aiController.requestAi(prompt);
+            return NextResponse.json({ result: response });
+        }
+
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }
 
-export async function GET(request: Request) {
-    return NextResponse.json({ message: 'AI API Route' });
-}
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const action = searchParams.get('action');
+    const model = searchParams.get('model');
 
-export async function POST(request: Request) {
-    return NextResponse.json({ message: 'AI API Route - POST' });
+    if (model) aiController.updateSettings(undefined, model);
+
+    if (action === 'status') {
+        const isOnline = await aiController.checkConnection();
+        return NextResponse.json({ status: isOnline ? 'online' : 'offline' });
+    }
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 }
