@@ -61,13 +61,13 @@ export class UserRepository {
       .select("userId")
       .eq("studentId", studentId)
       .eq("universityName", universityName)
-      .maybeSingle();
+      .limit(1);
 
     if (error) {
-      throw new Error(error.message);
+      throw new Error(error.message ?? "User lookup failed");
     }
 
-    return data != null;
+    return Array.isArray(data) && data.length > 0;
   }
 
   /**

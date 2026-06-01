@@ -79,7 +79,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
             const res = await fetch('/api/ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'generate', prompt, timeout: 10000, model: selectedModel })
+                body: JSON.stringify({ action: 'generate', prompt, timeout: 30000, model: selectedModel })
             });
             const data = await res.json();
             if (res.ok) {
