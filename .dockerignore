@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+*.md
+UML/
+Document/
+*.txt
+nginx.con
