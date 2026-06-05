@@ -1,8 +1,25 @@
+# local files
 node_modules
 .next
+tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# docs
+Document
+UML
+README.md
+
+# env-files
+.env
+.env.local
+.env.development
+.env.example
 .git
-*.md
-UML/
-Document/
-*.txt
-nginx.con
+.gitignore
+
+# docker setting files
+Dockerfile
+.dockerignore
+nginx.conf
+docker-compose.yml
