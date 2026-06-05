@@ -577,7 +577,6 @@ export default function MainView() {
     if (!token) return;
 
     let successCount = 0;
-
     await Promise.all(
       roomIds.map(async (id) => {
         try {
@@ -597,7 +596,12 @@ export default function MainView() {
       })
     );
     loadChatRoomList();
-    if (successCount > 0) alert(`선택한 ${successCount}개의 대화방에 AI 결과를 전송했습니다!`);
+    
+    if (successCount > 0) {
+        alert(`선택한 ${successCount}개의 대화방에 AI 결과를 전송했습니다!`);
+    } else {
+        alert("전송에 실패했습니다. AI 답변이 제대로 생성되었는지 확인해주세요.");
+    }
   };
 
   return (

@@ -95,8 +95,9 @@ export function messageToPayload(message: Message): ChatMessagePayload {
       senderId: message.senderId,
       createdAt: message.createdAt.toISOString(),
       type: "ai_prompt",
+      content: message.getContent(),
       prompt: message.prompt,
-      response: message.aiResponse,
+      response: message.response,
       model: message.model,
     };
   }
@@ -162,8 +163,8 @@ export function payloadToMessage(payload: ChatMessagePayload): Message {
       payload.id,
       payload.senderId,
       new Date(payload.createdAt),
-      aiData.prompt ?? "질문 없음",
-      aiData.response ?? "답변 없음",
+      aiData.prompt ?? "질문 내용을 불러올 수 없습니다.",
+      aiData.response ?? "AI 답변을 불러오지 못했습니다.", 
       aiData.model ?? "unknown"
     );
   }

@@ -6,7 +6,7 @@ export class GeminiAdapter implements AIAdapter {
     private apiKey = process.env.GEMINI_API_KEY || "";
     
     private model = "gemini-2.5-flash"; 
-    private timeout = 10000;
+    private timeout = 30000;
 
     setTimeout(time: number): void {
         this.timeout = time;

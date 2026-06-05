@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MessageFactory } from '@/domain/message/MessageFactory';
 import type { ChatRoomListItemDTO } from '@/entities/ChatRoomListItem';
 import type { ParticipantsDTO } from '@/entities/Participants';
@@ -24,27 +24,35 @@ interface Props {
 }
 
 const MAX_AI_QUOTA = 10;
-
-const getTodayKey = () => `ai_quota_${new Date().toISOString().split('T')[0]}`;
+const getTodayKey = (uid: string) => `ai_quota_${uid}_${new Date().toISOString().split('T')[0]}`;
 
 export default function AiQuestionView({ userId, chatRooms: initialChatRooms, onClose, onSendToRooms }: Props) {
     const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>(initialChatRooms);
-    
+
     const [prompt, setPrompt] = useState('');
-    const [aiResponse, setResponse] = useState<string | null>(null);
+    
+    const [submittedPrompt, setSubmittedPrompt] = useState('');
+    
+    const [aiResponse, setAiResponse] = useState<string | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
+    
+    const [displayedResponse, setDisplayedResponse] = useState<string>('');
+    
     const [isLoading, setIsLoading] = useState(false);
     const [aiStatus, setAiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
     
     const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
-
     const [usedQuota, setUsedQuota] = useState<number>(0);
+
+    const abortControllerRef = useRef<AbortController | null>(null);
     
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const storedQuota = localStorage.getItem(getTodayKey());
+        if (typeof window !== 'undefined' && userId){
+        const storedQuota = localStorage.getItem(getTodayKey(userId));
             if (storedQuota) setUsedQuota(parseInt(storedQuota, 10));
+            else setUsedQuota(0); 
         }
-    }, []);
+    }, [userId]);
 
     const remainQuota = Math.max(0, MAX_AI_QUOTA - usedQuota);
     const isQuotaExceeded = remainQuota <= 0;
@@ -57,6 +65,10 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     useEffect(() => { setChatRooms(initialChatRooms); }, [initialChatRooms]);
     useEffect(() => { checkAiConnection(selectedModel); }, [selectedModel]);
 
+    useEffect(() => {
+        return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
+    }, []);
+
     const checkAiConnection = async (model: string) => {
         setAiStatus('checking');
         try {
@@ -67,7 +79,11 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     };
 
     const requestAiAnswer = async () => {
-        if (!prompt.trim() || aiStatus === 'offline') return;
+        if (aiStatus === 'offline') return alert("AI 서버가 오프라인 상태입니다.");
+
+        if (!prompt.trim()) {
+            return alert("프롬프트(질문 내용)를 입력해주세요!");
+        }
         
         if (isQuotaExceeded) {
             alert(`⚠️ 일일 질문 할당량(${MAX_AI_QUOTA}회)을 모두 소진했습니다! 내일 다시 이용해주세요.`);
@@ -75,40 +91,79 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         }
 
         setIsLoading(true);
+        setAiResponse(null);
+        setAiError(null);
+        setSelectedRoomIds([]);
+        setDisplayedResponse(''); 
+        
+        setSubmittedPrompt(prompt);
+
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+        abortControllerRef.current = new AbortController();
+
         try {
             const res = await fetch('/api/ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'generate', prompt, timeout: 30000, model: selectedModel })
+                body: JSON.stringify({ action: 'generate', prompt, timeout: 30000, model: selectedModel }),
+                signal: abortControllerRef.current.signal
             });
             const data = await res.json();
             if (res.ok) {
-                setResponse(data.result);
+                setAiResponse(data.result);
                 setUsedQuota(prev => {
                     const nextQuota = prev + 1;
-                    if (typeof window !== 'undefined') localStorage.setItem(getTodayKey(), nextQuota.toString());
+                    if (typeof window !== 'undefined') localStorage.setItem(getTodayKey(userId), nextQuota.toString());
                     return nextQuota;
                 });
             } else {
-                setResponse(`에러 발생: ${data.error}`);
+                setAiResponse(`에러 발생: ${data.error}`);
             }
-        } catch (error) {
-            setResponse("네트워크 오류로 응답을 받지 못했습니다.");
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                setAiResponse("⚠️ 사용자에 의해 생성이 취소되었습니다.");
+            } else {
+                setAiResponse("네트워크 오류로 응답을 받지 못했습니다.");
+            }
         } finally {
             setIsLoading(false);
         }
     };
 
+    const handleCancelGeneration = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort(); 
+            setIsLoading(false);
+            setAiError("생성이 취소되었습니다. 프롬프트를 수정하여 다시 요청해보세요.");
+        }
+    };
+
+    useEffect(() => {
+        if (!aiResponse) return;
+        let index = 0;
+        const speed = 10; 
+        const intervalId = setInterval(() => {
+            setDisplayedResponse(aiResponse.slice(0, index));
+            index++;
+            if (index > aiResponse.length) {
+                clearInterval(intervalId);
+            }
+        }, speed);
+
+        return () => clearInterval(intervalId); 
+    }, [aiResponse]);
+
     const handleClearPrompt = () => {
         setPrompt('');
-        setResponse(null);
+        setAiResponse(null);
+        setDisplayedResponse('');
     };
 
     const requestShareAiResponse = async () => {
         if (selectedRoomIds.length === 0) return alert("왼쪽 목록에서 공유할 대화방을 1개 이상 선택해주세요.");
         if (!aiResponse) return alert("먼저 AI 답변을 생성해주세요.");
 
-        const aiPayload = { prompt, aiResponse, model: selectedModel };
+        const aiPayload = { prompt: submittedPrompt, response: aiResponse, model: selectedModel };
         const aiMsg = MessageFactory.createMessage('ai_prompt' as any, aiPayload as any, userId, "temp");
         if (!aiMsg) return;
 
@@ -116,7 +171,6 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         try {
             await onSendToRooms(selectedRoomIds, aiMsg);
             setSelectedRoomIds([]);
-            alert("공유가 완료되었습니다!");
             setIsSidebarOpenMobile(false);
         } finally {
             setIsSending(false);
@@ -151,16 +205,34 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     {filteredRooms.length === 0 ? (
                         <li className="text-center text-sm text-zinc-400 py-10 font-medium">진행 중인 대화방이 없습니다.</li>
                     ) : (
-                        filteredRooms.map(room => (
-                            <li key={room.roomId} className={`flex items-center justify-between p-3 rounded-xl border-2 transition-colors cursor-pointer ${selectedRoomIds.includes(room.roomId) ? 'border-indigo-500 bg-indigo-50' : 'border-transparent hover:bg-zinc-100'}`} onClick={() => toggleRoomSelection(room.roomId)}>
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <div className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-colors ${selectedRoomIds.includes(room.roomId) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-zinc-300'}`}>
-                                        {selectedRoomIds.includes(room.roomId) && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                        filteredRooms.map(room => {
+                            const canSelect = !!aiResponse && !aiError && !isLoading; 
+                            const isSelected = selectedRoomIds.includes(room.roomId);
+
+                            return (
+                                <li 
+                                    key={room.roomId} 
+                                    className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all 
+                                        ${!canSelect ? 'cursor-not-allowed opacity-40 bg-zinc-50' : 'cursor-pointer'}
+                                        ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-transparent hover:bg-zinc-100'}
+                                    `} 
+                                    onClick={() => {
+                                        if (canSelect) toggleRoomSelection(room.roomId);
+                                    }}
+                                >
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-colors 
+                                            ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-zinc-300'}`}
+                                        >
+                                            {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                        </div>
+                                        <span className="truncate text-sm font-bold flex-1 text-zinc-800">
+                                            {formatChatRoomListTitle(room.participants)}
+                                        </span>
                                     </div>
-                                    <span className="truncate text-sm font-bold flex-1">{formatChatRoomListTitle(room.participants)}</span>
-                                </div>
-                            </li>
-                        ))
+                                </li>
+                            );
+                        })
                     )}
                 </ul>
 
@@ -192,7 +264,8 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         <select 
             value={selectedModel} 
             onChange={(e) => setSelectedModel(e.target.value)} 
-            className="bg-white border border-zinc-300 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium flex-1"
+            disabled={isLoading} 
+            className="bg-white border border-zinc-300 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium flex-1 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
             <option value="gemini-2.5-flash">Gemini 2.5 Flash (기본/고속)</option>
             <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능/추론)</option>
@@ -236,31 +309,49 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             <button onClick={handleClearPrompt} disabled={isLoading || (!prompt && !aiResponse)} className="px-5 py-3.5 bg-zinc-200 text-zinc-700 rounded-2xl font-bold text-sm hover:bg-zinc-300 transition-colors disabled:opacity-50">
                                 초기화
                             </button>
-                            <button 
-                                onClick={requestAiAnswer} 
-                                disabled={isLoading || !prompt.trim() || aiStatus === 'offline' || isQuotaExceeded}
-                                className={`flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-[0.99] shadow-md ${isQuotaExceeded ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none' : 'bg-zinc-900 text-white hover:bg-black'}`}
-                            >
-                                {isLoading ? "생성 중..." : isQuotaExceeded ? "할당량 초과됨" : "답변 생성하기"}
-                            </button>
+                            {isLoading ? (
+                                <button 
+                                    onClick={handleCancelGeneration} 
+                                    className="flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-[0.99] shadow-md bg-red-500 text-white hover:bg-red-600 animate-pulse"
+                                >
+                                    생성 취소 (중단)
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={requestAiAnswer} 
+                                    disabled={!prompt.trim() || aiStatus === 'offline' || isQuotaExceeded}
+                                    className={`flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-[0.99] shadow-md ${isQuotaExceeded ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none' : 'bg-zinc-900 text-white hover:bg-black'}`}
+                                >
+                                    {isQuotaExceeded ? "할당량 초과됨" : "답변 생성하기"}
+                                </button>
+                            )}
                         </div>
                     </div>
 
                     <div className="flex-1 bg-white border border-zinc-200 rounded-2xl p-5 sm:p-6 overflow-y-auto relative custom-scrollbar shadow-inner">
-                        {!aiResponse && !isLoading && (
+                        {!aiResponse && !aiError && !isLoading && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-300 text-center px-4">
                                 <span className="text-5xl mb-3">💡</span>
                                 <span className="text-sm font-bold text-zinc-400 leading-relaxed">
-                                    
+                                    질문을 입력하고 답변을 생성해주세요.
                                 </span>
                             </div>
                         )}
+
                         {isLoading && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-500 gap-4">
                                 <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                                 <span className="font-bold text-sm animate-pulse tracking-wide">데이터를 처리하는 중...</span>
                             </div>
                         )}
+
+                        {aiError && !isLoading && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-3 px-6 text-center">
+                                <span className="text-4xl">⚠️</span>
+                                <span className="font-bold text-sm">{aiError}</span>
+                            </div>
+                        )}
+
                         {aiResponse && !isLoading && (
                             <div className="text-zinc-800 whitespace-pre-wrap leading-relaxed text-[15px]">
                                 {aiResponse}

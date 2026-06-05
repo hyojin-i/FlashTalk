@@ -28763,7 +28763,7 @@
 <XPD:REF name="DiagramOwner">4l41AAjIk0i+lXjIrci8jgAA</XPD:REF>
 <XPD:OBJ name="DiagramView" type="UMLClassDiagramView" guid="IxP1qFO2a0y5un6XEV2kaQAA">
 <XPD:REF name="Diagram">xFt+BelfPUGy/9YsRiMqxgAA</XPD:REF>
-<XPD:ATTR name="#OwnedViews" type="integer">33</XPD:ATTR>
+<XPD:ATTR name="#OwnedViews" type="integer">34</XPD:ATTR>
 <XPD:OBJ name="OwnedViews[0]" type="UMLPackageView" guid="kmarckz1zE6WHCY6uVW7YQAA">
 <XPD:ATTR name="LineColor" type="string">clMaroon</XPD:ATTR>
 <XPD:ATTR name="FillColor" type="string">$00B9FFFF</XPD:ATTR>
@@ -29520,9 +29520,40 @@
 <XPD:REF name="Model">gMd1gu0Dikeq4FKHeQSDkwAA</XPD:REF>
 </XPD:OBJ>
 </XPD:OBJ>
+<XPD:OBJ name="OwnedViews[33]" type="UMLClassView" guid="ba1qTImaPk6WZX/L3LeJbAAA">
+<XPD:ATTR name="LineColor" type="string">clMaroon</XPD:ATTR>
+<XPD:ATTR name="FillColor" type="string">$00B9FFFF</XPD:ATTR>
+<XPD:ATTR name="Left" type="integer">56</XPD:ATTR>
+<XPD:ATTR name="Top" type="integer">600</XPD:ATTR>
+<XPD:ATTR name="Width" type="integer">145</XPD:ATTR>
+<XPD:ATTR name="Height" type="integer">225</XPD:ATTR>
+<XPD:REF name="Model">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+<XPD:OBJ name="NameCompartment" type="UMLNameCompartmentView" guid="D+9fmRQUk0mnm89LFZekmQAA">
+<XPD:OBJ name="NameLabel" type="LabelView" guid="ZSkY/DRUc0GGYlh7UKI3KwAA">
+<XPD:ATTR name="FontStyle" type="integer">1</XPD:ATTR>
+<XPD:ATTR name="Text" type="string">AiQuestionView</XPD:ATTR>
+</XPD:OBJ>
+<XPD:OBJ name="StereotypeLabel" type="LabelView" guid="0zjZxUlSd06Cm2C3TVogZAAA">
+<XPD:ATTR name="Text" type="string">&lt;&lt;boundary&gt;&gt;</XPD:ATTR>
+</XPD:OBJ>
+<XPD:OBJ name="PropertyLabel" type="LabelView" guid="2xlWXt8Mnk29zxOxGnL1RwAA">
+<XPD:ATTR name="Visible" type="boolean">False</XPD:ATTR>
 </XPD:OBJ>
 </XPD:OBJ>
-<XPD:ATTR name="#OwnedElements" type="integer">37</XPD:ATTR>
+<XPD:OBJ name="AttributeCompartment" type="UMLAttributeCompartmentView" guid="NLKPQd+or0y3CXBwBmVfdwAA">
+<XPD:REF name="Model">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="OperationCompartment" type="UMLOperationCompartmentView" guid="YtV1za0lWE2cLyNY9cev1AAA">
+<XPD:REF name="Model">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="TemplateParameterCompartment" type="UMLTemplateParameterCompartmentView" guid="W/J/djHrRUeqk3mkCJX08QAA">
+<XPD:ATTR name="Visible" type="boolean">False</XPD:ATTR>
+<XPD:REF name="Model">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+</XPD:OBJ>
+</XPD:OBJ>
+</XPD:OBJ>
+<XPD:ATTR name="#OwnedElements" type="integer">38</XPD:ATTR>
 <XPD:OBJ name="OwnedElements[0]" type="UMLPackage" guid="so63C56onkSpq1etuUnFbgAA">
 <XPD:ATTR name="Name" type="string">User Authentication Package</XPD:ATTR>
 <XPD:REF name="Namespace">4l41AAjIk0i+lXjIrci8jgAA</XPD:REF>
@@ -30297,6 +30328,78 @@
 <XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
 <XPD:ATTR name="TypeExpression" type="string">Number</XPD:ATTR>
 <XPD:REF name="Owner">gMd1gu0Dikeq4FKHeQSDkwAA</XPD:REF>
+</XPD:OBJ>
+</XPD:OBJ>
+<XPD:OBJ name="OwnedElements[37]" type="UMLClass" guid="rNA/S42PXEKJp/T9K25GSgAA">
+<XPD:ATTR name="Name" type="string">AiQuestionView</XPD:ATTR>
+<XPD:ATTR name="StereotypeProfile" type="string">UMLStandard</XPD:ATTR>
+<XPD:ATTR name="StereotypeName" type="string">boundary</XPD:ATTR>
+<XPD:REF name="Namespace">4l41AAjIk0i+lXjIrci8jgAA</XPD:REF>
+<XPD:ATTR name="#Views" type="integer">4</XPD:ATTR>
+<XPD:REF name="Views[0]">ba1qTImaPk6WZX/L3LeJbAAA</XPD:REF>
+<XPD:REF name="Views[1]">NLKPQd+or0y3CXBwBmVfdwAA</XPD:REF>
+<XPD:REF name="Views[2]">YtV1za0lWE2cLyNY9cev1AAA</XPD:REF>
+<XPD:REF name="Views[3]">W/J/djHrRUeqk3mkCJX08QAA</XPD:REF>
+<XPD:ATTR name="#Operations" type="integer">6</XPD:ATTR>
+<XPD:OBJ name="Operations[0]" type="UMLOperation" guid="N8mxY5oKcUOgNcvXTwt0zwAA">
+<XPD:ATTR name="Name" type="string">checkAiConnection</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Operations[1]" type="UMLOperation" guid="qO+56yXQH0etKSkMlqAwFQAA">
+<XPD:ATTR name="Name" type="string">requestAiAnswer</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Operations[2]" type="UMLOperation" guid="P3jMo8ayoUarflpNk+ZsgQAA">
+<XPD:ATTR name="Name" type="string">handleCancelGeneration</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Operations[3]" type="UMLOperation" guid="HfXJa0NPVUuTi3pkYefJdgAA">
+<XPD:ATTR name="Name" type="string">handleClearPrompt</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Operations[4]" type="UMLOperation" guid="4JZ7pdpiK0qOiRJycnHL1QAA">
+<XPD:ATTR name="Name" type="string">requestShartAiResponse</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Operations[5]" type="UMLOperation" guid="cCQnXER+pkecv73KOaRrLwAA">
+<XPD:ATTR name="Name" type="string">toggleRoomSelection</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:ATTR name="#Attributes" type="integer">7</XPD:ATTR>
+<XPD:OBJ name="Attributes[0]" type="UMLAttribute" guid="fMtRlay8gESNDc3eDgYSlAAA">
+<XPD:ATTR name="Name" type="string">prompt</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Attributes[1]" type="UMLAttribute" guid="AL3///NnfkagZqDlkTh9yQAA">
+<XPD:ATTR name="Name" type="string">aiResponse</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Attributes[2]" type="UMLAttribute" guid="rnwC7yiS8EGZwL/WYGsxEgAA">
+<XPD:ATTR name="Name" type="string">isLoading</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Attributes[3]" type="UMLAttribute" guid="atJJ1cV8Qk6lg1TWYnnWvAAA">
+<XPD:ATTR name="Name" type="string">aiStatus</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Attributes[4]" type="UMLAttribute" guid="M4VeqckBREOpUBX41moEqgAA">
+<XPD:ATTR name="Name" type="string">selectedModel</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Attributes[5]" type="UMLAttribute" guid="UthljO4dzUu5vVIQd4GOvAAA">
+<XPD:ATTR name="Name" type="string">usedQuota</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
+</XPD:OBJ>
+<XPD:OBJ name="Attributes[6]" type="UMLAttribute" guid="hgSyzfnZKUKOlDV1dJt3pwAA">
+<XPD:ATTR name="Name" type="string">selectedRoomIds</XPD:ATTR>
+<XPD:ATTR name="Visibility" type="UMLVisibilityKind">vkPrivate</XPD:ATTR>
+<XPD:REF name="Owner">rNA/S42PXEKJp/T9K25GSgAA</XPD:REF>
 </XPD:OBJ>
 </XPD:OBJ>
 <XPD:ATTR name="#OwnedCollaborationInstanceSets" type="integer">8</XPD:ATTR>

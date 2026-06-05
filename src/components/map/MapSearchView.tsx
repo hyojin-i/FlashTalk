@@ -39,7 +39,7 @@ interface SelectedTarget {
     mapImageUrl?: string | null;
 }
 
-export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendToRooms }: Props) {
+export default function MapSearchView({ userId, chatRooms, onClose, onSendToRooms }: Props) {
     const router = useRouter();
     const [keyword, setKeyword] = useState('');
     const [isSearched, setIsSearched] = useState(false); 
@@ -77,7 +77,7 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
                 () => { 
                     setGpsDenied(true); setMyCoords(null); setMyLocationData(null); setGpsLoading(false); 
                 }, 
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 3000, maximumAge: 0 } 
             );
         } else { setGpsDenied(true); setGpsLoading(false); }
     }, []);
@@ -92,7 +92,7 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
                 permissionStatus.onchange = () => {
                     if (permissionStatus?.state === 'granted') updateLocation();
                     else if (permissionStatus?.state === 'denied') {
-                        setGpsDenied(true); setMyCoords(null); setMyLocationData(null);
+                        setGpsDenied(true); setMyCoords(null); setMyLocationData(null); setGpsLoading(false);
                     }
                 };
             }).catch(() => {});
@@ -117,7 +117,12 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
             setIsSearched(true); setResults([]); setSelectedTarget(null); setSortMode(null); return;
         }
 
-        setIsLoading(true); setSelectedTarget(null); setIsSearched(true);
+        setIsSearched(true);
+        setIsLoading(true); 
+
+        if (gpsLoading) return;
+
+        setSelectedTarget(null);
 
         try {
             let finalResults: LocationResult[] = [];
@@ -174,7 +179,7 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
         } finally { 
             setIsLoading(false); 
         }
-    }, [keyword, myCoords, myLocationData, gpsDenied]);
+    }, [keyword, myCoords, myLocationData, gpsDenied, gpsLoading]); 
 
     const handleSearchRef = useRef(handleSearch);
     handleSearchRef.current = handleSearch;
@@ -185,10 +190,10 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
             isFirstRender.current = false;
             return;
         }
-        if (isSearched && keyword.trim() !== '') {
+        if (isSearched && keyword.trim() !== '' && !gpsLoading) {
             handleSearchRef.current(); 
         }
-    }, [gpsDenied, myCoords?.lat, myCoords?.lng]); 
+    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading]); 
 
     const handleSelectLocation = async (loc: LocationResult) => {
         setSelectedTarget({
@@ -245,11 +250,14 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
 
             {!selectedTarget ? (
                 <div className="flex-1 flex flex-col overflow-hidden relative bg-white">
-                    <div className={`text-xs px-4 py-1.5 font-bold flex items-center gap-1.5 shrink-0 transition-colors ${gpsDenied ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
-                        {gpsDenied ? (
+                    
+                    <div className={`text-xs px-4 py-1.5 font-bold flex items-center gap-1.5 shrink-0 transition-colors ${gpsLoading ? 'bg-slate-100 text-slate-600' : gpsDenied ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                        {gpsLoading ? (
+                            <><span className="text-[10px] animate-pulse">⏳</span> 현재 위치 정보를 확인하는 중입니다...</>
+                        ) : gpsDenied ? (
                             <><span className="text-[10px]"></span> 위치 권한 차단됨 (정확도순 검색)</>
                         ) : (
-                            <><span className="text-[10px]"></span> 내 위치 활성화됨 (거리순 정렬)</>
+                            <><span className="text-[10px]"></span> 현재 위치 활성화됨 (거리순 정렬)</>
                         )}
                     </div>
 
@@ -265,11 +273,13 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
                                 placeholder="검색어를 입력해주세요." 
                                 className="flex-1 p-3 text-base text-zinc-900 font-medium placeholder-zinc-400 bg-zinc-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" 
                             />
-                            <button onClick={handleSearch} disabled={isLoading} className="px-6 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors">{isLoading ? "..." : "검색"}</button>
+                            <button onClick={handleSearch} disabled={isLoading} className="px-6 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                                {isLoading ? "..." : "검색"}
+                            </button>
                         </div>
                     </div>
 
-                    {isSearched && results.length > 0 && sortMode && (
+                    {isSearched && results.length > 0 && sortMode && !isLoading && (
                         <div className="bg-slate-50 border-b border-slate-100 p-2 px-4 flex items-center shrink-0">
                             <span className="text-[11px] font-bold text-slate-500">
                                 {sortMode === 'distance' ? '현재 좌표 기준 가장 가까운 순서' : '정확도 순서'}
@@ -277,7 +287,15 @@ export default function GlobalMapShareView({ userId, chatRooms, onClose, onSendT
                         </div>
                     )}
 
-                    <div className="flex-1 overflow-y-auto pb-4">
+                    <div className="flex-1 overflow-y-auto pb-4 relative">
+                        
+                        {isLoading && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 backdrop-blur-sm gap-3">
+                                <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <span className="text-sm font-bold text-indigo-500">{gpsLoading ? "위치 기반으로 검색을 준비 중..." : "장소 검색 중..."}</span>
+                            </div>
+                        )}
+
                         {isNoResults ? (
                             <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400">
                                 <span className="text-4xl mb-4">🔍</span><span className="text-sm font-medium">검색 결과가 없습니다.</span>

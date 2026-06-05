@@ -6,7 +6,7 @@ export class AiMessage extends Message {
     senderId: string,
     createdAt: Date,
     public prompt: string,
-    public aiResponse: string,
+    public response: string,
     public model: string
   ) {
     super(id, senderId, createdAt);
@@ -14,7 +14,7 @@ export class AiMessage extends Message {
   getContent(): string {
     return JSON.stringify({
       prompt: this.prompt,
-      response: this.aiResponse,
+      response: this.response,
       model: this.model,
     });
   }
