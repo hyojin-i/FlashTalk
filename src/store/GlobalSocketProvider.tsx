@@ -636,10 +636,41 @@ export function GlobalSocketProvider({
       void reconnectVisibleRooms();
     };
 
+    const handleBeforeUnload = () => {
+        const token = readStoredToken();
+        if (token) {
+            // fetch 대신 navigator.sendBeacon을 써야 창이 꺼질 때도 확실하게 전송됩니다!
+            const url = "/api/users/logout"; 
+            const headers = { type: 'application/json', Authorization: `Bearer ${token}` };
+            const blob = new Blob([JSON.stringify({})], headers);
+            navigator.sendBeacon(url, blob);
+        }
+    };
+
     pageVisibleRef.current = readPageVisible();
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    let globalPresenceChannel: RealtimeChannel | null = null;
+    const user = readStoredUser();
+    if (user && isAuthenticatedRoute(pathname)) {
+        const supabase = getBrowserSupabaseClient();
+        globalPresenceChannel = supabase.channel('global_presence');
+        globalPresenceChannel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                // 내 아이디를 트래킹에 등록! (내가 브라우저를 끄면 서버가 즉시 알아챔)
+                globalPresenceChannel?.track({ userId: user.userId });
+            }
+        });
+    }
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+
+      if (globalPresenceChannel) {
+          globalPresenceChannel.unsubscribe();
+      }
     };
   }, [pathname, reconnectVisibleRooms]);
 
