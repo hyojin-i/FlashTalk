@@ -46,6 +46,14 @@ function formatMessageTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+function withoutCurrentUser(
+  participants: ParticipantsDTO[],
+  currentUserId: string | undefined
+): ParticipantsDTO[] {
+  if (!currentUserId) return participants;
+  return participants.filter((p) => p.userId !== currentUserId);
+}
+
 function formatParticipantHeaderTitle(participants: ParticipantsDTO[]): string {
   const totalParticipants = participants.length + 1;
   if (participants.length === 0) return "채팅";
@@ -226,11 +234,16 @@ export default function ChatView({
   const leaveUi = roomLeaveUi[roomId];
   const chatDisabled = leaveUi?.chatDisabled ?? false;
 
-  const totalParticipantCount = participants.length + 1;
+  const otherParticipants = useMemo(
+    () => withoutCurrentUser(participants, currentUser?.userId),
+    [participants, currentUser?.userId]
+  );
+
+  const totalParticipantCount = otherParticipants.length + 1;
 
   const participantIdSet = useMemo(
-    () => new Set(participants.map((p) => p.userId)),
-    [participants]
+    () => new Set(otherParticipants.map((p) => p.userId)),
+    [otherParticipants]
   );
 
   const inviteSelectedUsers = useMemo(
@@ -252,11 +265,11 @@ export default function ChatView({
 
   const headerTitle = leaveUi?.partnerUnknown
     ? "(알 수 없음)"
-    : formatParticipantHeaderTitle(participants);
+    : formatParticipantHeaderTitle(otherParticipants);
   const headerSubtitle = leaveUi?.partnerUnknown
     ? "(알 수 없음)"
-    : participants.length === 1
-      ? participants[0].studentId
+    : otherParticipants.length === 1
+      ? otherParticipants[0].studentId
       : null;
 
   const attachFile = useCallback((file: File): void => {
@@ -489,12 +502,14 @@ export default function ChatView({
         /* ignore */
       }
       if (res.ok && data.ok && Array.isArray(data.participants)) {
-        setParticipants(data.participants);
+        setParticipants(
+          withoutCurrentUser(data.participants, currentUser?.userId)
+        );
       }
     } catch {
       /* ignore */
     }
-  }, [roomId]);
+  }, [roomId, currentUser?.userId]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -747,14 +762,17 @@ export default function ChatView({
       getRoomMessages(roomId)
     );
 
+    const myUserId = currentUser?.userId;
+
     setParticipants((prev) => {
-      let current = prev;
+      let current = withoutCurrentUser(prev, myUserId);
       for (const message of messages) {
         const fromMembership = participantFromMembershipMessage(message);
-        if (fromMembership) {
-          current = mergeParticipantList(current, fromMembership);
-        }
+        if (!fromMembership) continue;
+        if (myUserId && fromMembership.userId === myUserId) continue;
+        current = mergeParticipantList(current, fromMembership);
       }
+      current = withoutCurrentUser(current, myUserId);
 
       if (
         current.length === prev.length &&
@@ -783,13 +801,13 @@ export default function ChatView({
 
     lastMembershipSyncIdRef.current = latestMembership.id;
     void reloadParticipants();
-  }, [roomId, roomMessages, getRoomMessages, reloadParticipants]);
+  }, [roomId, roomMessages, getRoomMessages, reloadParticipants, currentUser?.userId]);
 
   useEffect(() => {
     const myUserId = currentUser?.userId;
     if (!myUserId) return;
 
-    const participantIds = new Set(participants.map((p) => p.userId));
+    const participantIds = new Set(otherParticipants.map((p) => p.userId));
     const hasUnknownSender = transientMessageList.some(
       (m) =>
         (m.type === "text" || m.type === "file") &&
@@ -801,7 +819,7 @@ export default function ChatView({
     if (hasUnknownSender) {
       void reloadParticipants();
     }
-  }, [transientMessageList, participants, currentUser, reloadParticipants]);
+  }, [transientMessageList, otherParticipants, currentUser, reloadParticipants]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -855,7 +873,10 @@ export default function ChatView({
           return;
         }
 
-        setParticipants(data.participants);
+        const user = readStoredUser();
+        setParticipants(
+          withoutCurrentUser(data.participants, user?.userId)
+        );
       } catch {
         if (!cancelled) {
           setParticipantsError("네트워크 오류가 발생했습니다.");
@@ -940,7 +961,7 @@ export default function ChatView({
             const senderName = resolveSenderName(
               msg.senderId,
               currentUser,
-              participants
+              otherParticipants
             );
             const timeLabel = formatMessageTime(msg.createdAt);
 
@@ -1291,7 +1312,7 @@ export default function ChatView({
                 </span>
               </span>
             </li>
-            {participants.map((p) => {
+            {otherParticipants.map((p) => {
               const online = p.isOnline;
               return (
                 <li key={p.userId} className="flex items-center gap-3">
@@ -1315,7 +1336,7 @@ export default function ChatView({
                 </li>
               );
             })}
-            {participantsLoading && participants.length === 0 && (
+            {participantsLoading && otherParticipants.length === 0 && (
               <li className="text-sm text-zinc-500">불러오는 중…</li>
             )}
           </ul>
