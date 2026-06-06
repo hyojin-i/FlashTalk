@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # 1. Node.js (Next.js)
+  flashtalk-node:
+    image: minseong426/flashtalk-node:latest
+    expose:
+      - "3000"
+    restart: always
+
+  # 2. Nginx 서비스
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - flashtalk-node
+    restart: always
