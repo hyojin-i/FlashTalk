@@ -22,7 +22,7 @@ import {
 import { getBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapSearchView from "@/components/map/MapSearchView";
 import AiQuestionView from "@/components/ai/AIQuestionView";
 
@@ -161,6 +161,21 @@ export default function MainView() {
     roomId: string;
     inviterName: string;
   } | null>(null);
+
+  const [globalMapOpen, setGlobalMapOpen] = useState(false);
+  const [globalAiOpen, setGlobalAiOpen] = useState(false);
+
+  const globalMapOpenRef = useRef(globalMapOpen);
+  const globalAiOpenRef = useRef(globalAiOpen);
+  globalMapOpenRef.current = globalMapOpen;
+  globalAiOpenRef.current = globalAiOpen;
+
+  const handleOpenMap = useCallback(() => {
+    window.history.pushState({ overlay: "map" }, "", window.location.href);
+    setGlobalMapOpen(true);
+  }, []);
+  const handleCloseMap = useCallback(() => setGlobalMapOpen(false), []);
+  const handleCloseAi = useCallback(() => setGlobalAiOpen(false), []);
 
   const visibleUsers = useMemo(
     () =>
@@ -322,6 +337,8 @@ export default function MainView() {
     window.history.pushState(null, "", mainUrl);
 
     const handlePopState = () => {
+      if (globalMapOpenRef.current || globalAiOpenRef.current) return;
+
       if (window.location.pathname !== "/main") {
         router.replace(mainUrl);
       }
@@ -561,9 +578,6 @@ export default function MainView() {
   const selectionCount = selectedUsers.length;
   const showCreationBox = selectionCount > 0;
 
-  const [globalMapOpen, setGlobalMapOpen] = useState(false);
-  const [globalAiOpen, setGlobalAiOpen] = useState(false);
-
   const handleSendMapToMultipleRooms = async (roomIds: string[], mapMessage: any) => {
     const token = readStoredToken();
     if (!token) return;
@@ -722,8 +736,9 @@ export default function MainView() {
               플래시톡
             </span>
             <button
-            onClick={() => setGlobalMapOpen(true)}
-            className="ml-4 rounded-lg bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-600 flex items-center gap-1.5"
+            type="button"
+            onClick={handleOpenMap}
+            className="ml-4 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 flex items-center gap-1.5"
         >
             지도 검색 및 공유
         </button>
@@ -1045,7 +1060,7 @@ export default function MainView() {
           <MapSearchView
               userId={currentUser?.userId ?? ''}
               chatRooms={chatRooms} 
-              onClose={() => setGlobalMapOpen(false)}
+              onClose={handleCloseMap}
               onSendToRooms={handleSendMapToMultipleRooms}
           />
       )}
@@ -1054,7 +1069,7 @@ export default function MainView() {
           <AiQuestionView
               userId={currentUser?.userId ?? ''}
               chatRooms={chatRooms} 
-              onClose={() => setGlobalAiOpen(false)}
+              onClose={handleCloseAi}
               onSendToRooms={handleSendAiToMultipleRooms}
           />
       )}

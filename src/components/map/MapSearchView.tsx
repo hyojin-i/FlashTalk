@@ -59,6 +59,16 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
     const [isSending, setIsSending] = useState(false);
 
+    const selectedTargetRef = useRef(selectedTarget);
+    const isSheetOpenRef = useRef(isSheetOpen);
+    const onCloseRef = useRef(onClose);
+    const closedByPopStateRef = useRef(false);
+    const pushedDetailIdRef = useRef<string | null>(null);
+    const wasSheetOpenRef = useRef(false);
+    selectedTargetRef.current = selectedTarget;
+    isSheetOpenRef.current = isSheetOpen;
+    onCloseRef.current = onClose;
+
     const updateLocation = useCallback(() => {
         setGpsLoading(true);
         if (navigator.geolocation) {
@@ -114,6 +124,45 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     useEffect(() => {
         if (gpsDenied) setActiveSort('accuracy');
     }, [gpsDenied]);
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (isSheetOpenRef.current) {
+                setIsSheetOpen(false);
+                setSelectedRoomIds([]);
+                return;
+            }
+            if (selectedTargetRef.current) {
+                setSelectedTarget(null);
+                return;
+            }
+            closedByPopStateRef.current = true;
+            onCloseRef.current();
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    useEffect(() => {
+        if (!selectedTarget) {
+            pushedDetailIdRef.current = null;
+            return;
+        }
+        if (pushedDetailIdRef.current === selectedTarget.id) return;
+        pushedDetailIdRef.current = selectedTarget.id;
+        window.history.pushState({ mapDetail: true }, '', window.location.href);
+    }, [selectedTarget]);
+
+    useEffect(() => {
+        if (!isSheetOpen) {
+            wasSheetOpenRef.current = false;
+            return;
+        }
+        if (wasSheetOpenRef.current) return;
+        wasSheetOpenRef.current = true;
+        window.history.pushState({ mapSheet: true }, '', window.location.href);
+    }, [isSheetOpen]);
 
     const handleSearch = useCallback(async () => {
         const rawKeyword = keyword.trim();
@@ -213,6 +262,17 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         });
     };
 
+    const handleBackToList = () => {
+        if (selectedTargetRef.current) {
+            window.history.back();
+        }
+    };
+
+    const handleHeaderClose = () => {
+        closedByPopStateRef.current = true;
+        onCloseRef.current();
+    };
+
     const toggleRoomSelection = (roomId: string) => setSelectedRoomIds(prev => prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId]);
 
     const executeShare = async () => {
@@ -238,7 +298,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     return (
         <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-50 dark:bg-zinc-950 animate-slide-up overflow-hidden">
             <header className="flex items-center h-14 px-4 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 shrink-0 shadow-sm z-20">
-                <button onClick={onClose} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-zinc-50 transition-colors">
+                <button onClick={handleHeaderClose} className="p-2 -ml-2 rounded-lg text-zinc-600 dark:text-zinc-50 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <h1 className="text-lg font-bold ml-2 text-zinc-900 dark:text-zinc-50">장소 검색 및 공유</h1>
@@ -284,7 +344,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                             <button 
                                 onClick={() => setActiveSort('distance')}
                                 disabled={gpsDenied || gpsLoading} 
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-sky-500 text-white border-sky-400' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-900'}`}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-900'}`}
                             >
                                 거리순
                             </button>
@@ -340,8 +400,12 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
             ) : (
                 <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950 overflow-hidden animate-slide-in-right z-30">
                     <div className="flex items-center p-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 shadow-sm">
-                        <button onClick={() => setSelectedTarget(null)} className="flex items-center text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-zinc-50 font-bold px-2 py-1 bg-zinc-100 dark:bg-zinc-950 rounded-lg transition-colors">
-                            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+                        <button
+                            type="button"
+                            onClick={handleBackToList}
+                            className="back-to-list-btn flex items-center text-zinc-700 dark:text-zinc-50 hover:bg-zinc-100 dark:hover:bg-zinc-900 font-bold px-3 py-1.5 bg-zinc-100 dark:bg-zinc-950 rounded-lg"
+                        >
+                            <svg className="back-to-list-arrow w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
                             목록으로 돌아가기
                         </button>
                     </div>
@@ -387,7 +451,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                     <div className="relative bg-white dark:bg-zinc-950 w-full h-[65%] rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
                         <div className="flex justify-between items-center p-5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
                             <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-50">어느 대화방에 공유할까요?</h3>
-                            <button onClick={() => setIsSheetOpen(false)} className="text-zinc-500 dark:text-zinc-400 hover:text-black dark:hover:text-zinc-50 p-1">닫기</button>
+                            <button onClick={() => setIsSheetOpen(false)} className="text-zinc-500 dark:text-zinc-50 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg p-1 transition-colors">닫기</button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3">
                             {chatRooms.length === 0 ? (
@@ -424,6 +488,32 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
             )}
             
             <style jsx>{`
+                .back-to-list-btn {
+                    border: 1px solid transparent;
+                    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+                }
+                .back-to-list-btn:hover {
+                    transform: translateX(-2px);
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                    border-color: rgba(0, 0, 0, 0.08);
+                }
+                .back-to-list-btn:active {
+                    transform: translateX(-1px) scale(0.98);
+                }
+                .back-to-list-arrow {
+                    transition: transform 0.2s ease;
+                }
+                .back-to-list-btn:hover .back-to-list-arrow {
+                    transform: translateX(-3px);
+                }
+                @media (prefers-color-scheme: dark) {
+                    .back-to-list-btn:hover {
+                        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+                        border-color: rgba(255, 255, 255, 0.18);
+                    }
+                }
+                .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
+                @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
             `}</style>
