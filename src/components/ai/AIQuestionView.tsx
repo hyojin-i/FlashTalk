@@ -47,7 +47,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     
     useEffect(() => {
         if (typeof window !== 'undefined' && userId){
-        const storedQuota = localStorage.getItem(getTodayKey(userId));
+            const storedQuota = localStorage.getItem(getTodayKey(userId));
             if (storedQuota) setUsedQuota(parseInt(storedQuota, 10));
             else setUsedQuota(0); 
         }
@@ -193,22 +193,22 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     return (
         <div className="fixed inset-0 z-[100] flex bg-zinc-100 animate-slide-up overflow-hidden text-zinc-900">
             
-            <aside className={`absolute md:relative z-30 w-80 h-full bg-white border-r border-zinc-200 flex flex-col shrink-0 transition-transform duration-300 ${isSidebarOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
-                <div className="flex items-center justify-between p-4 border-b border-zinc-100 shrink-0 bg-indigo-50">
-                    <h2 className="font-extrabold text-[15px] text-indigo-900">결과를 공유할 대화방 선택</h2>
-                    <span className="text-xs font-bold text-indigo-600 bg-white px-2 py-1 rounded-md shadow-sm">{selectedRoomIds.length}개 선택됨</span>
+            <aside className={`absolute md:relative z-30 w-80 h-full bg-white border-r-2 border-zinc-300 flex flex-col shrink-0 transition-transform duration-300 ${isSidebarOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
+                <div className="flex items-center justify-between p-4 border-b-2 border-zinc-200 shrink-0 bg-indigo-100">
+                    <h2 className="font-black text-[16px] text-indigo-950">결과를 공유할 대화방 선택</h2>
+                    <span className="text-sm font-extrabold text-indigo-700 bg-white px-2.5 py-1 rounded-md shadow-sm border border-indigo-200">{selectedRoomIds.length}개 선택됨</span>
                 </div>
                 
-                <div className="p-3 border-b border-zinc-100 shrink-0">
+                <div className="p-3 border-b-2 border-zinc-200 shrink-0 bg-zinc-50">
                     <input 
                         type="text" placeholder="대화방 이름을 검색해주세요." value={roomSearchKeyword} onChange={e => setRoomSearchKeyword(e.target.value)}
-                        className="w-full bg-zinc-100 px-3 py-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        className="w-full bg-white px-3 py-2.5 rounded-xl text-sm font-bold text-zinc-900 border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all placeholder:text-zinc-500 placeholder:font-semibold shadow-inner"
                     />
                 </div>
                 
-                <ul className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                <ul className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar bg-white">
                     {filteredRooms.length === 0 ? (
-                        <li className="text-center text-sm text-zinc-400 py-10 font-medium">진행 중인 대화방이 없습니다.</li>
+                        <li className="text-center text-sm text-zinc-600 py-10 font-bold bg-zinc-50 rounded-xl m-2 border border-zinc-200">진행 중인 대화방이 없습니다.</li>
                     ) : (
                         filteredRooms.map(room => {
                             const canSelect = !!aiResponse && !aiError && !isLoading; 
@@ -217,9 +217,9 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             return (
                                 <li 
                                     key={room.roomId} 
-                                    className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all 
-                                        ${!canSelect ? 'cursor-not-allowed opacity-40 bg-zinc-50' : 'cursor-pointer'}
-                                        ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-transparent hover:bg-zinc-100'}
+                                    className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all shadow-sm
+                                        ${!canSelect ? 'cursor-not-allowed opacity-50 bg-zinc-100 border-zinc-200' : 'cursor-pointer hover:border-indigo-300'}
+                                        ${isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-zinc-200 bg-white'}
                                     `} 
                                     onClick={() => {
                                         if (canSelect) toggleRoomSelection(room.roomId);
@@ -227,11 +227,11 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                                 >
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
                                         <div className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-colors 
-                                            ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-zinc-300'}`}
+                                            ${isSelected ? 'bg-indigo-700 border-indigo-700' : 'bg-white border-zinc-400'}`}
                                         >
-                                            {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                            {isSelected && <svg className="w-3.5 h-3.5 text-white font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                         </div>
-                                        <span className="truncate text-sm font-bold flex-1 text-zinc-800">
+                                        <span className="truncate text-[15px] font-extrabold flex-1 text-zinc-950">
                                             {formatChatRoomListTitle(room.participants)}
                                         </span>
                                     </div>
@@ -241,43 +241,43 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     )}
                 </ul>
 
-                <div className="p-4 border-t border-zinc-200 bg-white shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+                <div className="p-4 border-t-2 border-zinc-200 bg-zinc-50 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.08)]">
                     <button 
                         onClick={requestShareAiResponse} 
                         disabled={isSending || !aiResponse || !!aiError || selectedRoomIds.length === 0} 
-                        className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-base hover:bg-indigo-700 disabled:opacity-50 transition-transform active:scale-[0.98] shadow-lg shadow-indigo-200"
+                        className="w-full py-4 bg-indigo-700 text-white rounded-xl font-black text-[15px] tracking-wide hover:bg-indigo-800 disabled:bg-zinc-400 disabled:text-zinc-100 disabled:border-zinc-400 disabled:opacity-80 transition-all active:scale-[0.98] shadow-lg shadow-indigo-300 border-2 border-indigo-800"
                     >
-                        {isSending ? "전송 중..." : selectedRoomIds.length === 0 ? "대화방을 선택하세요" : `${selectedRoomIds.length}개 방에 전송하기`}
+                        {isSending ? "전송 중..." : selectedRoomIds.length === 0 ? "대화방을 먼저 선택하세요" : `${selectedRoomIds.length}개 방에 전송하기`}
                     </button>
                 </div>
             </aside>
 
             <main className="flex-1 flex flex-col min-w-0 bg-[#fdfdfd] relative z-10">
-                {isSidebarOpenMobile && <div className="absolute inset-0 bg-black/40 z-20 md:hidden" onClick={() => setIsSidebarOpenMobile(false)} />}
+                {isSidebarOpenMobile && <div className="absolute inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsSidebarOpenMobile(false)} />}
 
-                <header className="flex items-center h-14 px-4 bg-white border-b border-zinc-200 shrink-0 justify-between shadow-sm">
+                <header className="flex items-center h-16 px-4 bg-white border-b-2 border-zinc-200 shrink-0 justify-between shadow-sm">
                     <div className="flex items-center">
-                        <button onClick={() => setIsSidebarOpenMobile(true)} className="md:hidden mr-3 p-1.5 text-zinc-600 hover:bg-zinc-100 rounded-lg">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        <button onClick={() => setIsSidebarOpenMobile(true)} className="md:hidden mr-3 p-2 bg-zinc-100 border border-zinc-300 text-zinc-800 hover:bg-zinc-200 transition-colors rounded-lg font-bold">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                         </button>
-                        <h1 className="text-lg font-extrabold flex items-center gap-1.5">
-                            <span className="text-xl"></span> AI 프롬프트
+                        <h1 className="text-xl font-black flex items-center gap-2 text-zinc-950 tracking-tight">
+                             AI 프롬프트
                         </h1>
                     </div>
-                    <div className="flex items-center gap-2 p-3 border-b border-zinc-100 bg-zinc-50 shrink-0">
-                        <span className="font-semibold text-zinc-500 text-sm">엔진:</span>
+                    <div className="flex items-center gap-2 p-2 border-2 border-zinc-200 bg-zinc-50 shrink-0 rounded-xl shadow-inner">
+                        <span className="font-extrabold text-zinc-800 text-sm ml-1">엔진:</span>
                         <select 
                             value={selectedModel} 
                             onChange={(e) => setSelectedModel(e.target.value)} 
                             disabled={isLoading} 
-                            className="bg-white border border-zinc-300 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium flex-1 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                            className="bg-white border-2 border-zinc-300 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 font-extrabold flex-1 disabled:bg-zinc-200 disabled:text-zinc-500 transition-colors text-zinc-950 cursor-pointer"
                         >
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (기본/고속)</option>
-                            <option value="gemini-3.5-flash">Gemini 3.5 Flash (차세대 프리뷰)</option>
-                            <option value="gemini-flash-latest">Gemini Flash Latest (자동 최신화)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (고속)</option>
+                            <option value="gemini-3.5-flash">Gemini 3.5 Flash (차세대)</option>
+                            <option value="gemini-flash-latest">Gemini Flash Latest</option>
                         </select>
                     </div>
-                    <button onClick={onClose} className="flex items-center gap-1 px-3 py-1.5 bg-zinc-100 text-zinc-600 hover:text-white hover:bg-zinc-800 rounded-lg text-sm font-bold transition-colors">
+                    <button onClick={onClose} className="flex items-center gap-1.5 px-4 py-2 bg-white text-zinc-800 hover:text-white hover:bg-zinc-900 border-2 border-zinc-300 rounded-xl text-[14px] font-black transition-colors shadow-sm ml-2">
                         화면 닫기
                     </button>
                 </header>
@@ -286,12 +286,12 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     
                     <div className="flex flex-col gap-2 shrink-0">
                         <div className="flex justify-between items-end mb-1 px-1">
-                            <label className="text-sm font-bold text-zinc-700 flex items-center gap-2">
+                            <label className="text-[15px] font-black text-zinc-950 flex items-center gap-2 tracking-tight">
                                 AI에게 질문해주세요.
-                                <span className="hidden sm:inline bg-zinc-100 text-zinc-500 text-[10px] px-2 py-0.5 rounded-full font-medium">Ctrl + Enter 전송</span>
+                                <span className="hidden sm:inline bg-zinc-100 text-zinc-700 border-2 border-zinc-200 text-[11px] px-2.5 py-0.5 rounded-full font-bold shadow-sm">Ctrl + Enter 전송</span>
                             </label>
-                            <span className={`text-[11px] font-bold px-2 py-1 rounded-md border ${isQuotaExceeded ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
-                                할당량: {remainQuota}/{MAX_AI_QUOTA}
+                            <span className={`text-xs font-black px-2.5 py-1 rounded-lg border-2 shadow-sm ${isQuotaExceeded ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-zinc-100 text-zinc-700 border-zinc-300'}`}>
+                                할당량: <span className={isQuotaExceeded ? 'text-red-700' : 'text-indigo-700'}>{remainQuota}</span> / {MAX_AI_QUOTA}
                             </span>
                         </div>
                         
@@ -306,25 +306,25 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             }}
                             disabled={isQuotaExceeded || isLoading}
                             placeholder={isQuotaExceeded ? "⚠️ 일일 할당량을 모두 소진했습니다. 내일 다시 시도해주세요." : "(Ctrl + Enter 키로 바로 전송 가능)"}
-                            className={`w-full h-32 p-4 bg-white border rounded-2xl resize-none outline-none transition-all shadow-sm text-[15px] leading-relaxed ${isQuotaExceeded ? 'border-red-300 bg-red-50/30 text-red-900 cursor-not-allowed placeholder:text-red-400' : 'border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200'}`}
+                            className={`w-full h-36 p-5 bg-white border-2 rounded-2xl resize-none outline-none transition-all shadow-sm text-[16px] leading-relaxed font-bold text-zinc-950 placeholder:font-semibold placeholder:text-zinc-400 ${isQuotaExceeded ? 'border-red-400 bg-red-50/50 text-red-900 cursor-not-allowed placeholder:text-red-500' : 'border-zinc-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100'}`}
                         />
                         
-                        <div className="flex gap-2">
-                            <button onClick={handleClearPrompt} disabled={isLoading || (!prompt && !aiResponse && !aiError)} className="px-5 py-3.5 bg-zinc-200 text-zinc-700 rounded-2xl font-bold text-sm hover:bg-zinc-300 transition-colors disabled:opacity-50">
+                        <div className="flex gap-3 mt-1">
+                            <button onClick={handleClearPrompt} disabled={isLoading || (!prompt && !aiResponse && !aiError)} className="px-6 py-4 bg-white text-zinc-800 border-2 border-zinc-300 rounded-2xl font-black text-[15px] hover:bg-zinc-100 hover:border-zinc-400 transition-colors disabled:bg-zinc-100 disabled:text-zinc-400 disabled:border-zinc-200 shadow-sm">
                                 초기화
                             </button>
                             {isLoading ? (
                                 <button 
                                     onClick={handleCancelGeneration} 
-                                    className="flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-[0.99] shadow-md bg-red-500 text-white hover:bg-red-600 animate-pulse"
+                                    className="flex-1 py-4 rounded-2xl font-black text-[16px] tracking-wide transition-all shadow-md bg-red-600 text-white hover:bg-red-700 border-2 border-red-700 animate-pulse"
                                 >
-                                    생성 취소 (중단)
+                                    생성 중단하기
                                 </button>
                             ) : (
                                 <button 
                                     onClick={requestAiAnswer} 
                                     disabled={!prompt.trim() || aiStatus === 'offline' || isQuotaExceeded}
-                                    className={`flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-[0.99] shadow-md ${isQuotaExceeded ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none' : 'bg-zinc-900 text-white hover:bg-black'}`}
+                                    className={`flex-1 py-4 rounded-2xl font-black text-[16px] tracking-wide transition-all active:scale-[0.99] shadow-md border-2 ${isQuotaExceeded ? 'bg-zinc-200 text-zinc-500 border-zinc-300 cursor-not-allowed shadow-none' : 'bg-zinc-950 text-white border-black hover:bg-zinc-800'}`}
                                 >
                                     {isQuotaExceeded ? "할당량 초과됨" : "답변 생성하기"}
                                 </button>
@@ -332,31 +332,31 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-white border border-zinc-200 rounded-2xl p-5 sm:p-6 overflow-y-auto relative custom-scrollbar shadow-inner">
+                    <div className="flex-1 bg-white border-2 border-zinc-200 rounded-2xl p-6 sm:p-8 overflow-y-auto relative custom-scrollbar shadow-inner">
                         {!aiResponse && !aiError && !isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-300 text-center px-4">
-                                <span className="text-5xl mb-3">💡</span>
-                                <span className="text-sm font-bold text-zinc-400 leading-relaxed">
-                                    질문을 입력하고 답변을 생성해주세요.
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 text-center px-4 bg-zinc-50/50 rounded-2xl m-2 border-2 border-dashed border-zinc-200">
+                                <span className="text-6xl mb-4">💡</span>
+                                <span className="text-[15px] font-extrabold text-zinc-500 leading-relaxed">
+                                    질문을 입력하고 <span className="text-zinc-800">답변 생성하기</span> 버튼(또는 Ctrl + Enter)을 눌러주세요.
                                 </span>
                             </div>
                         )}
 
                         {isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-500 gap-4">
-                                <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                                <span className="font-bold text-sm animate-pulse tracking-wide">데이터를 처리하는 중...</span>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-600 gap-5 bg-indigo-50/30 rounded-2xl">
+                                <div className="w-12 h-12 border-[5px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin shadow-sm"></div>
+                                <span className="font-black text-[15px] animate-pulse tracking-wide bg-white px-4 py-2 rounded-xl shadow-sm border border-indigo-100">데이터를 처리하는 중입니다...</span>
                             </div>
                         )}
                         {aiError && !isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-3 px-6 text-center bg-red-50/50 rounded-2xl">
-                                <span className="text-4xl">⚠️</span>
-                                <span className="font-bold text-sm bg-white px-4 py-2 rounded-lg shadow-sm border border-red-100">{aiError}</span>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-red-600 gap-4 px-6 text-center bg-red-50 rounded-2xl m-2 border border-red-200">
+                                <span className="text-5xl">⚠️</span>
+                                <span className="font-black text-[15px] bg-white px-5 py-3 rounded-xl shadow-sm border-2 border-red-200">{aiError}</span>
                             </div>
                         )}
 
                         {aiResponse && !isLoading && !aiError && (
-                            <div className="text-zinc-800 whitespace-pre-wrap leading-relaxed text-[15px]">
+                            <div className="text-zinc-950 whitespace-pre-wrap leading-[1.8] text-[16px] font-bold">
                                 {displayedResponse}
                             </div>
                         )}
@@ -365,11 +365,11 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
             </main>
             
             <style jsx>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #a1a1aa; border-radius: 10px; border: 2px solid white; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
-                @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+                .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                @keyframes slideUp { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
             `}</style>
         </div>
     );

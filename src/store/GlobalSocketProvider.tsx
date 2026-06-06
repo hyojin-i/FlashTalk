@@ -639,7 +639,6 @@ export function GlobalSocketProvider({
     const handleBeforeUnload = () => {
         const token = readStoredToken();
         if (token) {
-            // fetch 대신 navigator.sendBeacon을 써야 창이 꺼질 때도 확실하게 전송됩니다!
             const url = "/api/users/logout"; 
             const headers = { type: 'application/json', Authorization: `Bearer ${token}` };
             const blob = new Blob([JSON.stringify({})], headers);
@@ -656,13 +655,23 @@ export function GlobalSocketProvider({
     if (user && isAuthenticatedRoute(pathname)) {
         const supabase = getBrowserSupabaseClient();
         globalPresenceChannel = supabase.channel('global_presence');
+        globalPresenceChannel.on('broadcast', { event: 'USER_KICKED' }, (payload: any) => {
+            if (payload.payload?.targetUserId === user.userId) {
+                resetBrowserRealtimeAuth();
+                sessionStorage.removeItem(CLIENT_JWT_KEY);
+                sessionStorage.removeItem(CLIENT_USER_KEY);
+                
+                window.location.href = "/login?reason=kicked";
+            }
+        });
+
         globalPresenceChannel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-                // 내 아이디를 트래킹에 등록! (내가 브라우저를 끄면 서버가 즉시 알아챔)
                 globalPresenceChannel?.track({ userId: user.userId });
             }
         });
     }
+    
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);

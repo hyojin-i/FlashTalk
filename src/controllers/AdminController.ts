@@ -1,6 +1,7 @@
 import { UserRepository } from "@/repositories/UserRepository";
 import { UserPresenceRepository } from "@/repositories/UserPresenceRepository";
 import type { UserSearchResultDTO } from "@/entities/User";
+import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export class AdminController {
     constructor(
@@ -43,6 +44,17 @@ export class AdminController {
 
         const dbClient = (this.userRepository as any).constructor.db;
         
+        try {
+            const supabaseAdmin = getSupabaseAdminClient();
+            await supabaseAdmin.channel('global_presence').send({
+                type: 'broadcast',
+                event: 'USER_KICKED',
+                payload: { targetUserId: targetUserId }
+            });
+        } catch (e) {
+            console.warn("Failed to broadcast kick event:", e);
+        }
+
         const { error } = await dbClient.from("User").delete().eq("userId", targetUserId);
         
         if (error) throw new Error("사용자 삭제 중 DB 오류가 발생했습니다.");

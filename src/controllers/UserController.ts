@@ -3,6 +3,7 @@ import { UserPresenceController } from "@/controllers/UserPresenceController";
 import { UserRepository } from "@/repositories/UserRepository";
 import type { LoginResult, SessionUserDTO, User, UserDTO } from "@/entities/User";
 import { signUserToken } from "@/lib/jwt";
+import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const SCRYPT_SALT_BYTES = 16;
 const SCRYPT_KEYLEN = 64;
@@ -136,7 +137,11 @@ export class UserController {
 
   /** 로그아웃: 접속 상태를 오프라인으로 갱신합니다. */
   async logout(userId: string): Promise<boolean> {
-    await this.presenceController.updatePresence(userId, false);
+   try {
+      await this.presenceController.updatePresence(userId, false);
+    } catch (e) {
+      console.warn(`[UserController.logout] User ${userId} already deleted or presence update failed. Proceeding with logout.`);
+    }
     return true;
   }
 
@@ -153,6 +158,20 @@ export class UserController {
       ...dto,
       password: hashPassword(dto.password),
     };
-    return this.repository.save(dtoToSave);
+    
+    const saved = await this.repository.save(dtoToSave);
+    
+    if (saved) {
+        try {
+            const supabaseAdmin = getSupabaseAdminClient();
+            await supabaseAdmin.channel('global_presence').send({
+                type: 'broadcast',
+                event: 'USER_LIST_CHANGED',
+                payload: {}
+            });
+        } catch (e) { console.warn("Broadcast failed", e); }
+    }
+    
+    return saved;
   }
 }
