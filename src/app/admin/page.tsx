@@ -277,7 +277,11 @@ export default function AdminView() {
                                     <p className="text-sm text-red-600 font-bold animate-pulse bg-red-50 p-3 rounded-xl border border-red-100">※ 삭제된 데이터는 어떤 방법으로도 복구할 수 없습니다.</p>
                                     <div className="flex gap-2 mt-4">
                                         <button onClick={() => setDeleteModalStep(0)} disabled={isDeleting} className="flex-1 py-4 bg-zinc-100 text-zinc-700 font-bold rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50">안전하게 취소</button>
-                                        <button onClick={executeDelete} disabled={isDeleting} className="flex-1 py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-200 disabled:opacity-50">
+                                        <button
+                                            onClick={executeDelete}
+                                            disabled={isDeleting}
+                                            className="flex-1 py-4 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors shadow-md shadow-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
                                             {isDeleting ? "삭제 처리 중..." : "최종 영구 삭제"}
                                         </button>
                                     </div>
