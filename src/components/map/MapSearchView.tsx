@@ -45,8 +45,8 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     const [isSearched, setIsSearched] = useState(false); 
     const [results, setResults] = useState<LocationResult[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    
-    const [sortMode, setSortMode] = useState<'distance' | 'accuracy' | null>(null);
+
+    const [activeSort, setActiveSort] = useState<'distance' | 'accuracy'>('distance');
 
     const [myCoords, setMyCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [myLocationData, setMyLocationData] = useState<{ address: string; mapImageUrl: string } | null>(null);
@@ -111,25 +111,27 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         };
     }, [updateLocation]);
 
+    useEffect(() => {
+        if (gpsDenied) setActiveSort('accuracy');
+    }, [gpsDenied]);
+
     const handleSearch = useCallback(async () => {
         const rawKeyword = keyword.trim();
         if (!rawKeyword) {
-            setIsSearched(true); setResults([]); setSelectedTarget(null); setSortMode(null); return;
+            setIsSearched(true); setResults([]); setSelectedTarget(null); return;
         }
 
         setIsSearched(true);
         setIsLoading(true); 
-
         if (gpsLoading) return;
-
         setSelectedTarget(null);
 
         try {
             let finalResults: LocationResult[] = [];
-            let isDistanceSort = false;
+            
+            const actualSort = (activeSort === 'distance' && myCoords && !gpsDenied) ? 'distance' : 'accuracy';
 
-            if (myCoords && !gpsDenied) {
-                isDistanceSort = true;
+            if (actualSort === 'distance' && myCoords) {
                 let searchSuccess = false;
                 const gpsQuery = `&lat=${myCoords.lat}&lng=${myCoords.lng}`;
 
@@ -141,30 +143,25 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                         const smartKeyword = `${localArea} ${rawKeyword}`;
                         const res1 = await fetch(`/api/map?action=search&keyword=${encodeURIComponent(smartKeyword)}${gpsQuery}`);
                         const data1 = await res1.json();
-                        
                         if (res1.ok && data1.results && data1.results.length > 0) {
                             finalResults = data1.results;
                             searchSuccess = true;
                         }
                     }
                 }
-
                 if (!searchSuccess) {
                     const res2 = await fetch(`/api/map?action=search&keyword=${encodeURIComponent(rawKeyword)}${gpsQuery}`);
                     const data2 = await res2.json();
-                    if (res2.ok && data2.results) {
-                        finalResults = data2.results;
-                    }
+                    if (res2.ok && data2.results) finalResults = data2.results;
                 }
-
+                
                 if (finalResults.length > 0) {
                     finalResults = finalResults.map((loc: LocationResult) => ({
                         ...loc,
                         distance: loc.distance ?? calculateDistance(myCoords.lat, myCoords.lng, loc.latitude, loc.longitude)
-                    })).sort((a: LocationResult, b: LocationResult) => (a.distance || 0) - (b.distance || 0));
+                    })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
                 }
             } else {
-                isDistanceSort = false;
                 const res = await fetch(`/api/map?action=search&keyword=${encodeURIComponent(rawKeyword)}`);
                 const data = await res.json();
                 if (res.ok && data.results) {
@@ -172,14 +169,13 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                 }
             }
 
-            setSortMode(isDistanceSort ? 'distance' : 'accuracy');
             setResults(finalResults);
         } catch { 
             setResults([]); 
         } finally { 
             setIsLoading(false); 
         }
-    }, [keyword, myCoords, myLocationData, gpsDenied, gpsLoading]); 
+    }, [keyword, myCoords, myLocationData, gpsDenied, gpsLoading, activeSort]); 
 
     const handleSearchRef = useRef(handleSearch);
     handleSearchRef.current = handleSearch;
@@ -193,7 +189,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         if (isSearched && keyword.trim() !== '' && !gpsLoading) {
             handleSearchRef.current(); 
         }
-    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading]); 
+    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading, activeSort]); 
 
     const handleSelectLocation = async (loc: LocationResult) => {
         setSelectedTarget({
@@ -255,19 +251,19 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                         {gpsLoading ? (
                             <><span className="text-[10px] animate-pulse">⏳</span> 현재 위치 정보를 확인하는 중입니다...</>
                         ) : gpsDenied ? (
-                            <><span className="text-[10px]"></span> 위치 권한 차단됨 (정확도순 검색)</>
+                            <><span className="text-[10px]"></span> 위치 권한 차단됨</>
                         ) : (
-                            <><span className="text-[10px]"></span> 현재 위치 활성화됨 (거리순 정렬)</>
+                            <><span className="text-[10px]"></span> 현재 위치 활성화됨</>
                         )}
                     </div>
 
-                    <div className="p-4 shrink-0 shadow-sm pt-3 z-10">
+                    <div className="px-4 pt-3 pb-2 shrink-0 bg-white z-10">
                         <div className="flex gap-2">
                             <input 
                                 type="text" value={keyword} 
                                 onChange={e => { 
                                     setKeyword(e.target.value); 
-                                    if (e.target.value === '') { setResults([]); setIsSearched(false); setSortMode(null); } 
+                                    if (e.target.value === '') { setResults([]); setIsSearched(false); } 
                                 }} 
                                 onKeyDown={e => e.key === 'Enter' && handleSearch()} 
                                 placeholder="검색어를 입력해주세요." 
@@ -277,22 +273,30 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                                 {isLoading ? "..." : "검색"}
                             </button>
                         </div>
+
+                        <div className="flex items-center gap-2 mt-3">
+                            <button 
+                                onClick={() => setActiveSort('accuracy')}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSort === 'accuracy' ? 'bg-zinc-800 text-white border-zinc-800' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}
+                            >
+                                정확도순
+                            </button>
+                            <button 
+                                onClick={() => setActiveSort('distance')}
+                                disabled={gpsDenied || gpsLoading} 
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}
+                            >
+                                거리순
+                            </button>
+                        </div>
                     </div>
 
-                    {isSearched && results.length > 0 && sortMode && !isLoading && (
-                        <div className="bg-slate-50 border-b border-slate-100 p-2 px-4 flex items-center shrink-0">
-                            <span className="text-[11px] font-bold text-slate-500">
-                                {sortMode === 'distance' ? '현재 좌표 기준 가장 가까운 순서' : '정확도 순서'}
-                            </span>
-                        </div>
-                    )}
-
-                    <div className="flex-1 overflow-y-auto pb-4 relative">
+                    <div className="flex-1 overflow-y-auto pb-4 relative border-t border-zinc-100">
                         
                         {isLoading && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 backdrop-blur-sm gap-3">
                                 <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                                <span className="text-sm font-bold text-indigo-500">{gpsLoading ? "위치 기반으로 검색을 준비 중..." : "장소 검색 중..."}</span>
+                                <span className="text-sm font-bold text-indigo-500">{gpsLoading ? "위치 정보를 가져오는 중..." : "장소 검색 중..."}</span>
                             </div>
                         )}
 
@@ -321,7 +325,11 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                                             <p className="text-sm text-zinc-500 mt-1.5 break-words leading-snug">{loc.address}</p>
                                         </div>
                                         <div className="flex flex-col items-end shrink-0 ml-2">
-                                            {loc.distance !== undefined && <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-md h-fit text-slate-600 font-bold whitespace-nowrap">{loc.distance >= 1000 ? `${(loc.distance/1000).toFixed(1)}km` : `${loc.distance}m`}</span>}
+                                            {activeSort === 'distance' && loc.distance !== undefined && (
+                                                <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-md h-fit text-slate-600 font-bold whitespace-nowrap">
+                                                    {loc.distance >= 1000 ? `${(loc.distance/1000).toFixed(1)}km` : `${loc.distance}m`}
+                                                </span>
+                                            )}
                                         </div>
                                     </li>
                                 ))}
@@ -347,7 +355,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                             {selectedTarget.type === 'search' && (
                                 <p className="text-base text-zinc-500 mt-2 break-words leading-snug">{selectedTarget.address}</p>
                             )}
-                            {selectedTarget.distance !== undefined && selectedTarget.type === 'search' && selectedTarget.distance > 0 && (
+                            {activeSort === 'distance' && selectedTarget.distance !== undefined && selectedTarget.type === 'search' && selectedTarget.distance > 0 && (
                                 <span className="inline-block mt-3 text-sm bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold">
                                     현재 내 위치에서 {selectedTarget.distance >= 1000 ? `${(selectedTarget.distance/1000).toFixed(1)}km` : `${selectedTarget.distance}m`}
                                 </span>

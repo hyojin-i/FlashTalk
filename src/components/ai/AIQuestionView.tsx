@@ -30,20 +30,19 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>(initialChatRooms);
 
     const [prompt, setPrompt] = useState('');
-    
+    const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+
     const [submittedPrompt, setSubmittedPrompt] = useState('');
+    const [submittedModel, setSubmittedModel] = useState('');
     
     const [aiResponse, setAiResponse] = useState<string | null>(null);
     const [aiError, setAiError] = useState<string | null>(null);
-    
     const [displayedResponse, setDisplayedResponse] = useState<string>('');
     
     const [isLoading, setIsLoading] = useState(false);
     const [aiStatus, setAiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
     
-    const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
     const [usedQuota, setUsedQuota] = useState<number>(0);
-
     const abortControllerRef = useRef<AbortController | null>(null);
     
     useEffect(() => {
@@ -79,10 +78,14 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     };
 
     const requestAiAnswer = async () => {
-        if (aiStatus === 'offline') return alert("AI 서버가 오프라인 상태입니다.");
+        if (aiStatus === 'offline') {
+            setAiError("AI 서버가 현재 오프라인 상태입니다.");
+            return;
+        }
 
         if (!prompt.trim()) {
-            return alert("프롬프트(질문 내용)를 입력해주세요!");
+            setAiError("프롬프트(질문 내용)를 입력해주세요!");
+            return;
         }
         
         if (isQuotaExceeded) {
@@ -97,6 +100,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         setDisplayedResponse(''); 
         
         setSubmittedPrompt(prompt);
+        setSubmittedModel(selectedModel);
 
         if (abortControllerRef.current) abortControllerRef.current.abort();
         abortControllerRef.current = new AbortController();
@@ -117,13 +121,13 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     return nextQuota;
                 });
             } else {
-                setAiResponse(`에러 발생: ${data.error}`);
+                setAiError(`에러 발생: ${data.error}`);
             }
         } catch (error: any) {
             if (error.name === 'AbortError') {
-                setAiResponse("⚠️ 사용자에 의해 생성이 취소되었습니다.");
+                setAiError("⚠️ 사용자에 의해 생성이 취소되었습니다.");
             } else {
-                setAiResponse("네트워크 오류로 응답을 받지 못했습니다.");
+                setAiError("네트워크 오류로 응답을 받지 못했습니다.");
             }
         } finally {
             setIsLoading(false);
@@ -156,6 +160,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     const handleClearPrompt = () => {
         setPrompt('');
         setAiResponse(null);
+        setAiError(null);
         setDisplayedResponse('');
     };
 
@@ -163,7 +168,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         if (selectedRoomIds.length === 0) return alert("왼쪽 목록에서 공유할 대화방을 1개 이상 선택해주세요.");
         if (!aiResponse) return alert("먼저 AI 답변을 생성해주세요.");
 
-        const aiPayload = { prompt: submittedPrompt, response: aiResponse, model: selectedModel };
+        const aiPayload = { prompt: submittedPrompt, response: aiResponse, model: submittedModel };
         const aiMsg = MessageFactory.createMessage('ai_prompt' as any, aiPayload as any, userId, "temp");
         if (!aiMsg) return;
 
@@ -239,7 +244,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                 <div className="p-4 border-t border-zinc-200 bg-white shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
                     <button 
                         onClick={requestShareAiResponse} 
-                        disabled={isSending || !aiResponse || selectedRoomIds.length === 0} 
+                        disabled={isSending || !aiResponse || !!aiError || selectedRoomIds.length === 0} 
                         className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-base hover:bg-indigo-700 disabled:opacity-50 transition-transform active:scale-[0.98] shadow-lg shadow-indigo-200"
                     >
                         {isSending ? "전송 중..." : selectedRoomIds.length === 0 ? "대화방을 선택하세요" : `${selectedRoomIds.length}개 방에 전송하기`}
@@ -260,19 +265,18 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                         </h1>
                     </div>
                     <div className="flex items-center gap-2 p-3 border-b border-zinc-100 bg-zinc-50 shrink-0">
-        <span className="font-semibold text-zinc-500 text-sm">엔진:</span>
-        <select 
-            value={selectedModel} 
-            onChange={(e) => setSelectedModel(e.target.value)} 
-            disabled={isLoading} 
-            className="bg-white border border-zinc-300 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium flex-1 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-        >
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (기본/고속)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro (고성능/추론)</option>
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash (차세대 프리뷰)</option>
-            <option value="gemini-flash-latest">Gemini Flash Latest (자동 최신화)</option>
-        </select>
-    </div>
+                        <span className="font-semibold text-zinc-500 text-sm">엔진:</span>
+                        <select 
+                            value={selectedModel} 
+                            onChange={(e) => setSelectedModel(e.target.value)} 
+                            disabled={isLoading} 
+                            className="bg-white border border-zinc-300 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium flex-1 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                        >
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (기본/고속)</option>
+                            <option value="gemini-3.5-flash">Gemini 3.5 Flash (차세대 프리뷰)</option>
+                            <option value="gemini-flash-latest">Gemini Flash Latest (자동 최신화)</option>
+                        </select>
+                    </div>
                     <button onClick={onClose} className="flex items-center gap-1 px-3 py-1.5 bg-zinc-100 text-zinc-600 hover:text-white hover:bg-zinc-800 rounded-lg text-sm font-bold transition-colors">
                         화면 닫기
                     </button>
@@ -306,7 +310,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                         />
                         
                         <div className="flex gap-2">
-                            <button onClick={handleClearPrompt} disabled={isLoading || (!prompt && !aiResponse)} className="px-5 py-3.5 bg-zinc-200 text-zinc-700 rounded-2xl font-bold text-sm hover:bg-zinc-300 transition-colors disabled:opacity-50">
+                            <button onClick={handleClearPrompt} disabled={isLoading || (!prompt && !aiResponse && !aiError)} className="px-5 py-3.5 bg-zinc-200 text-zinc-700 rounded-2xl font-bold text-sm hover:bg-zinc-300 transition-colors disabled:opacity-50">
                                 초기화
                             </button>
                             {isLoading ? (
@@ -344,17 +348,16 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                                 <span className="font-bold text-sm animate-pulse tracking-wide">데이터를 처리하는 중...</span>
                             </div>
                         )}
-
                         {aiError && !isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-3 px-6 text-center">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-3 px-6 text-center bg-red-50/50 rounded-2xl">
                                 <span className="text-4xl">⚠️</span>
-                                <span className="font-bold text-sm">{aiError}</span>
+                                <span className="font-bold text-sm bg-white px-4 py-2 rounded-lg shadow-sm border border-red-100">{aiError}</span>
                             </div>
                         )}
 
-                        {aiResponse && !isLoading && (
+                        {aiResponse && !isLoading && !aiError && (
                             <div className="text-zinc-800 whitespace-pre-wrap leading-relaxed text-[15px]">
-                                {aiResponse}
+                                {displayedResponse}
                             </div>
                         )}
                     </div>

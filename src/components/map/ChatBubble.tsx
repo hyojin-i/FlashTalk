@@ -20,7 +20,7 @@ export default function ChatBubble({ message, isMe, senderName }: ChatBubbleProp
     const navUrl = `https://map.naver.com/v5/search/${encodeURIComponent(mapData.placeName)}?c=${mapData.longitude},${mapData.latitude},15,0,0,dh`;
 
     return (
-        <div className={`flex flex-col mb-4 w-full ${isMe ? 'items-end' : 'items-start'}`}>
+        <div className={`flex flex-col mb-4 ${isMe ? 'items-end' : 'items-start'}`}>
             <span className="text-xs text-slate-400 mb-1">
                 {isMe ? '내가 위치를 공유했습니다' : `${senderName}님이 위치를 공유했습니다`}
             </span>
