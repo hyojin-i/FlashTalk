@@ -53,6 +53,10 @@ export default function SignUpLoginView() {
   const [signUpError, setSignUpError] = useState<string | null>(null);
   const [signUpPending, setSignUpPending] = useState(false);
 
+  const [registerConfirmOpen, setRegisterConfirmOpen] = useState(false);
+  const [pendingRegisterSid, setPendingRegisterSid] = useState("");
+  const [pendingRegisterUni, setPendingRegisterUni] = useState("");
+
   /**
    * Returns whether the user is already registered (`User` row exists).
    * On HTTP/network failure, sets `lookupError` and throws so the step stays on lookup.
@@ -110,10 +114,24 @@ export default function SignUpLoginView() {
 
     try {
       const exists = await verifyUser(sid, uni);
-      setStep(exists ? "login" : "register");
+      if (exists) {
+        setStep("login");
+      } else {
+        setPendingRegisterSid(sid);
+        setPendingRegisterUni(uni);
+        setUniversityName(uni);
+        setRegisterConfirmOpen(true);
+      }
     } catch {
       /* `lookupError` already set in verifyUser */
     }
+  }
+
+  function confirmRegisterStep(): void {
+    setStudentId(pendingRegisterSid);
+    setUniversityName(pendingRegisterUni);
+    setRegisterConfirmOpen(false);
+    setStep("register");
   }
 
   /**
@@ -423,11 +441,12 @@ export default function SignUpLoginView() {
             </p>
             <input
               value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
+              readOnly
               inputMode="numeric"
               autoComplete="username"
               placeholder="학번"
-              className="h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+              aria-readonly="true"
+              className="h-11 w-full rounded-md border border-zinc-200 bg-zinc-100 px-4 text-sm text-zinc-900 outline-none cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
               required
             />
             <input
@@ -440,10 +459,11 @@ export default function SignUpLoginView() {
             />
             <input
               value={universityName}
-              onChange={(e) => setUniversityName(e.target.value)}
+              readOnly
               autoComplete="organization"
               placeholder="학교 명 ex) 한국대"
-              className="h-11 w-full rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+              aria-readonly="true"
+              className="h-11 w-full rounded-md border border-zinc-200 bg-zinc-100 px-4 text-sm text-zinc-900 outline-none cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
               required
             />
             <input
@@ -472,6 +492,7 @@ export default function SignUpLoginView() {
               className="text-sm text-zinc-600 underline dark:text-zinc-400"
               onClick={() => {
                 setSignUpError(null);
+                setRegisterConfirmOpen(false);
                 setStep("lookup");
               }}
             >
@@ -480,6 +501,54 @@ export default function SignUpLoginView() {
           </form>
         )}
       </main>
+
+      {registerConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="register-confirm-title"
+        >
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-lg dark:bg-zinc-950">
+            <h2
+              id="register-confirm-title"
+              className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+            >
+              입력하신 학번/학교명을 확인해 주세요.
+            </h2>
+            <div className="mt-4 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
+              <p>
+                <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                  학번:
+                </span>{" "}
+                {pendingRegisterSid}
+              </p>
+              <p>
+                <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                  학교명:
+                </span>{" "}
+                {pendingRegisterUni}
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRegisterConfirmOpen(false)}
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-950"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmRegisterStep}
+                className="rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+              >
+                네
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
