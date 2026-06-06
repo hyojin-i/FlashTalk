@@ -42,6 +42,9 @@ interface SelectedTarget {
 export default function MapSearchView({ userId, chatRooms, onClose, onSendToRooms }: Props) {
     const router = useRouter();
     const [keyword, setKeyword] = useState('');
+
+    const [lastSearchedKeyword, setLastSearchedKeyword] = useState('');
+    
     const [isSearched, setIsSearched] = useState(false); 
     const [results, setResults] = useState<LocationResult[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -164,8 +167,8 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         window.history.pushState({ mapSheet: true }, '', window.location.href);
     }, [isSheetOpen]);
 
-    const handleSearch = useCallback(async () => {
-        const rawKeyword = keyword.trim();
+    const executeSearch = useCallback(async (searchQuery: string) => {
+        const rawKeyword = searchQuery.trim();
         if (!rawKeyword) {
             setIsSearched(true); setResults([]); setSelectedTarget(null); return;
         }
@@ -174,10 +177,10 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         setIsLoading(true); 
         if (gpsLoading) return;
         setSelectedTarget(null);
+        setLastSearchedKeyword(rawKeyword); 
 
         try {
             let finalResults: LocationResult[] = [];
-            
             const actualSort = (activeSort === 'distance' && myCoords && !gpsDenied) ? 'distance' : 'accuracy';
 
             if (actualSort === 'distance' && myCoords) {
@@ -224,21 +227,17 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         } finally { 
             setIsLoading(false); 
         }
-    }, [keyword, myCoords, myLocationData, gpsDenied, gpsLoading, activeSort]); 
+    }, [myCoords, myLocationData, gpsDenied, gpsLoading, activeSort]);
 
-    const handleSearchRef = useRef(handleSearch);
-    handleSearchRef.current = handleSearch;
-    const isFirstRender = useRef(true);
+    const handleSearchClick = () => {
+        executeSearch(keyword);
+    };
 
     useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
+        if (isSearched && lastSearchedKeyword.trim() !== '' && !gpsLoading) {
+            executeSearch(lastSearchedKeyword);
         }
-        if (isSearched && keyword.trim() !== '' && !gpsLoading) {
-            handleSearchRef.current(); 
-        }
-    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading, activeSort]); 
+    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading, activeSort, executeSearch, lastSearchedKeyword]); 
 
     const handleSelectLocation = async (loc: LocationResult) => {
         setSelectedTarget({
@@ -257,8 +256,14 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     const handleSelectMyLocation = () => {
         if (!myCoords || !myLocationData) return;
         setSelectedTarget({
-            type: 'myLocation', id: 'my-loc', placeName: myLocationData.address, address: myLocationData.address,
-            latitude: myCoords.lat, longitude: myCoords.lng, distance: 0, mapImageUrl: myLocationData.mapImageUrl
+            type: 'myLocation', 
+            id: 'my-loc', 
+            placeName: "현재 위치", 
+            address: myLocationData.address,
+            latitude: myCoords.lat, 
+            longitude: myCoords.lng, 
+            distance: 0, 
+            mapImageUrl: myLocationData.mapImageUrl
         });
     };
 
@@ -292,8 +297,8 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         } finally { setIsSending(false); }
     };
 
-    const isDefaultMode = !keyword.trim();
-    const isNoResults = isSearched && keyword.trim() && !isLoading && results.length === 0;
+    const isDefaultMode = !isSearched || !lastSearchedKeyword.trim(); 
+    const isNoResults = isSearched && lastSearchedKeyword.trim() && !isLoading && results.length === 0;
 
     return (
         <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-50 dark:bg-zinc-950 animate-slide-up overflow-hidden">
@@ -323,13 +328,13 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                                 type="text" value={keyword} 
                                 onChange={e => { 
                                     setKeyword(e.target.value); 
-                                    if (e.target.value === '') { setResults([]); setIsSearched(false); } 
+                                    if (e.target.value === '') { setResults([]); setIsSearched(false); setLastSearchedKeyword(''); } 
                                 }} 
-                                onKeyDown={e => e.key === 'Enter' && handleSearch()} 
+                                onKeyDown={e => e.key === 'Enter' && handleSearchClick()} 
                                 placeholder="검색어를 입력해주세요." 
                                 className="flex-1 p-3 text-base text-zinc-900 dark:text-zinc-50 font-medium placeholder-zinc-500 bg-zinc-100 dark:bg-zinc-950 rounded-xl outline-none focus:border-zinc-400 transition-shadow" 
                             />
-                            <button onClick={handleSearch} disabled={isLoading} className="shrink-0 px-6 py-3 bg-sky-500 text-white rounded-xl font-bold hover:bg-zinc-800 disabled:opacity-50 transition-colors">
+                            <button onClick={handleSearchClick} disabled={isLoading || !keyword.trim()} className="shrink-0 px-6 py-3 bg-sky-500 text-white rounded-xl font-bold hover:bg-zinc-800 disabled:opacity-50 transition-colors">
                                 {isLoading ? "..." : "검색"}
                             </button>
                         </div>
@@ -373,8 +378,11 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                             </div>
                         ) : isDefaultMode && myLocationData && myCoords ? (
                             <div onClick={handleSelectMyLocation} className="w-full p-8 bg-sky-50/80 dark:bg-sky-950/30 flex flex-col justify-center items-center border-b border-zinc-200 dark:border-zinc-800 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
-                                <span className="text-xs font-extrabold text-zinc-800 dark:text-zinc-200 mb-3 bg-white dark:bg-zinc-950 px-4 py-2 rounded-full shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center gap-1">📍 현재 내 위치 크게 보기 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg></span>
+                                <span className="text-xs font-extrabold text-sky-600 dark:text-sky-400 mb-3 bg-white dark:bg-zinc-950 px-4 py-2 rounded-full shadow-sm border border-sky-100 dark:border-zinc-700 flex items-center gap-1.5">
+                                    <span>📍</span> 현재 내 위치 상세 보기 <svg className="w-3 h-3 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+                                </span>
                                 <span className="text-xl font-bold text-zinc-900 dark:text-zinc-50 text-center leading-tight break-words px-4">{myLocationData.address}</span>
+                                <span className="text-xs text-zinc-400 mt-2">클릭하여 이 위치를 바로 공유하세요</span>
                             </div>
                         ) : (
                             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -488,30 +496,12 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
             )}
             
             <style jsx>{`
-                .back-to-list-btn {
-                    border: 1px solid transparent;
-                    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-                }
-                .back-to-list-btn:hover {
-                    transform: translateX(-2px);
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                    border-color: rgba(0, 0, 0, 0.08);
-                }
-                .back-to-list-btn:active {
-                    transform: translateX(-1px) scale(0.98);
-                }
-                .back-to-list-arrow {
-                    transition: transform 0.2s ease;
-                }
-                .back-to-list-btn:hover .back-to-list-arrow {
-                    transform: translateX(-3px);
-                }
-                @media (prefers-color-scheme: dark) {
-                    .back-to-list-btn:hover {
-                        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-                        border-color: rgba(255, 255, 255, 0.18);
-                    }
-                }
+                .back-to-list-btn { border: 1px solid transparent; transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+                .back-to-list-btn:hover { transform: translateX(-2px); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border-color: rgba(0, 0, 0, 0.08); }
+                .back-to-list-btn:active { transform: translateX(-1px) scale(0.98); }
+                .back-to-list-arrow { transition: transform 0.2s ease; }
+                .back-to-list-btn:hover .back-to-list-arrow { transform: translateX(-3px); }
+                @media (prefers-color-scheme: dark) { .back-to-list-btn:hover { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5); border-color: rgba(255, 255, 255, 0.18); } }
                 .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
                 @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }

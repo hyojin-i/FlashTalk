@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { UserSearchResultDTO } from '@/entities/User';
 import { CLIENT_JWT_KEY, CLIENT_USER_KEY } from '@/lib/session';
 import { resetBrowserRealtimeAuth } from '@/lib/supabase-realtime-auth';
-
 import { createClient } from '@supabase/supabase-js';
 
 type TabType = 'ALL' | 'ONLINE' | 'OFFLINE';
@@ -21,13 +20,23 @@ export default function AdminView() {
     const [deleteModalStep, setDeleteModalStep] = useState<0 | 1 | 2>(0);
     const [targetUser, setTargetUser] = useState<UserSearchResultDTO | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    
     const [logoutPending, setLogoutPending] = useState(false);
 
     const getToken = () => {
         try { return sessionStorage.getItem(CLIENT_JWT_KEY) || ''; } 
         catch { return ''; }
     };
+
+    const fetchUsers = useCallback(async () => {
+        const token = getToken();
+        if (!token) return;
+        try {
+            const res = await fetch('/api/admin', { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json();
+            if (res.ok && data.users) { setUsers(data.users); }
+        } catch (e) { console.error("Admin fetch error", e); } 
+        finally { setIsLoading(false); }
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -36,26 +45,7 @@ export default function AdminView() {
         let dbChannel: any = null;
 
         const initAdminSockets = async () => {
-            const token = getToken();
-            if (!token) { router.replace('/login'); return; }
-
-            try {
-                const res = await fetch('/api/admin', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const data = await res.json();
-                if (res.ok && data.users) {
-                    if (isMounted) setUsers(data.users);
-                } else {
-                    alert("권한이 없거나 불러오기에 실패했습니다.");
-                    router.replace('/main');
-                    return;
-                }
-            } catch (e) {
-                console.error("Admin fetch error", e);
-            } finally {
-                if (isMounted) setIsLoading(false);
-            }
+            await fetchUsers(); 
 
             const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
             const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
@@ -64,24 +54,19 @@ export default function AdminView() {
             presenceChannel = isolatedSupabase.channel('global_presence')
                 .on('presence', { event: 'sync' }, () => {
                     if (!isMounted) return;
-                    
                     const state = presenceChannel.presenceState();
                     const currentlyOnlineIds = new Set<string>();
-                    
                     for (const k in state) {
-                        state[k].forEach((p: any) => {
-                            if (p.userId) currentlyOnlineIds.add(p.userId);
-                        });
+                        state[k].forEach((p: any) => { if (p.userId) currentlyOnlineIds.add(p.userId); });
                     }
-
-                    setUsers(prev => prev.map(u => ({
-                        ...u,
-                        isOnline: currentlyOnlineIds.has(u.userId)
-                    })));
+                    setUsers(prev => prev.map(u => ({ ...u, isOnline: currentlyOnlineIds.has(u.userId) })));
+                })
+                .on('broadcast', { event: 'USER_LIST_CHANGED' }, () => {
+                    if (isMounted) fetchUsers();
                 })
                 .subscribe();
 
-            const uniqueDbChannelName = `admin_db_changes_${Date.now()}`;
+            const uniqueDbChannelName = `admin_db_changes_${Date.now()}_${Math.random().toString(36).substring(7)}`;
             dbChannel = isolatedSupabase.channel(uniqueDbChannelName)
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'UserPresence' }, (payload: any) => {
                     if (!isMounted) return;
@@ -100,16 +85,12 @@ export default function AdminView() {
                 if (dbChannel) isolatedSupabase.removeChannel(dbChannel);
             }
         };
-    }, [router]);
+    }, [fetchUsers]);
 
     const filteredUsers = useMemo(() => {
         return users.filter(user => {
             const matchesSearch = user.name.includes(searchQuery) || user.studentId.includes(searchQuery);
-            const matchesTab = 
-                activeTab === 'ALL' ? true :
-                activeTab === 'ONLINE' ? user.isOnline :
-                !user.isOnline;
-            
+            const matchesTab = activeTab === 'ALL' ? true : activeTab === 'ONLINE' ? user.isOnline : !user.isOnline;
             return matchesSearch && matchesTab;
         });
     }, [users, searchQuery, activeTab]);
@@ -122,13 +103,11 @@ export default function AdminView() {
     const executeDelete = async () => {
         if (!targetUser) return;
         setIsDeleting(true);
-        
         try {
             const res = await fetch(`/api/admin?userId=${targetUser.userId}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${getToken()}` }
             });
-
             if (res.ok) {
                 setUsers(prev => prev.filter(u => u.userId !== targetUser.userId));
                 alert(`${targetUser.name}님이 성공적으로 탈퇴 처리되었습니다.`);
@@ -142,18 +121,18 @@ export default function AdminView() {
     const handleAdminLogout = async () => {
         setLogoutPending(true);
         try {
-            const res = await fetch("/api/users/logout", {
+            await fetch("/api/users/logout", {
                 method: "POST",
                 headers: { Authorization: `Bearer ${getToken()}` },
             });
-            if (res.ok) {
-                resetBrowserRealtimeAuth();
-                sessionStorage.removeItem(CLIENT_JWT_KEY);
-                sessionStorage.removeItem(CLIENT_USER_KEY);
-                router.replace("/login");
-            } else { alert("로그아웃에 실패했습니다."); }
-        } catch { alert("네트워크 오류"); } 
-        finally { setLogoutPending(false); }
+        } catch { console.warn("Logout request failed"); } 
+        finally { 
+            resetBrowserRealtimeAuth();
+            sessionStorage.removeItem(CLIENT_JWT_KEY);
+            sessionStorage.removeItem(CLIENT_USER_KEY);
+            router.replace("/login");
+            setLogoutPending(false); 
+        }
     };
 
     return (
@@ -173,14 +152,14 @@ export default function AdminView() {
             </header>
 
             <main className="flex-1 max-w-5xl w-full mx-auto p-6 flex flex-col gap-6">
-                
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 flex gap-4 items-center">
                     <div className="flex-1 relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">🔍</span>
                         <input 
                             type="text" 
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="사용자 이름 또는 학번으로 검색하세요."
+                            placeholder="사용자 이름 또는 학번으로 검색해 주세요"
                             className="w-full bg-zinc-100 pl-11 pr-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-base text-zinc-900"
                         />
                     </div>

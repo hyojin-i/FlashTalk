@@ -2,7 +2,7 @@
 
 import type { SessionUserDTO } from "@/entities/User";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Step = "lookup" | "login" | "register";
 
@@ -310,6 +310,18 @@ export default function SignUpLoginView() {
       }
     })();
   }
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("reason") === "kicked") {
+        setTimeout(() => {
+          alert("관리자에 의해 강제 탈퇴 처리되었습니다.\n그동안 이용해 주셔서 감사합니다.");
+        }, 100);
+        window.history.replaceState({}, document.title, "/login");
+      }
+    }
+  }, []);
 
   return (
     <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 font-sans dark:bg-black">
