@@ -315,6 +315,23 @@ export default function MainView() {
     loadChatRoomList();
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const mainUrl = "/main";
+    window.history.pushState(null, "", mainUrl);
+
+    const handlePopState = () => {
+      if (window.location.pathname !== "/main") {
+        router.replace(mainUrl);
+      }
+      window.history.pushState(null, "", mainUrl);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [currentUser, router]);
+
   handleInviteBroadcastRef.current = (rawPayload: unknown) => {
     const invite = rawPayload as InviteToRoomPayload;
     if (typeof invite?.roomId !== "string") return;
