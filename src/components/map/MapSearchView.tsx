@@ -236,18 +236,18 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     const isNoResults = isSearched && keyword.trim() && !isLoading && results.length === 0;
 
     return (
-        <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-50 animate-slide-up overflow-hidden">
-            <header className="flex items-center h-14 px-4 bg-white border-b shrink-0 shadow-sm z-20">
-                <button onClick={onClose} className="p-2 -ml-2 text-zinc-600 hover:text-black transition-colors">
+        <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-50 dark:bg-zinc-950 animate-slide-up overflow-hidden">
+            <header className="flex items-center h-14 px-4 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 shrink-0 shadow-sm z-20">
+                <button onClick={onClose} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-zinc-50 transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
-                <h1 className="text-lg font-bold ml-2 text-zinc-900">장소 검색 및 공유</h1>
+                <h1 className="text-lg font-bold ml-2 text-zinc-900 dark:text-zinc-50">장소 검색 및 공유</h1>
             </header>
 
             {!selectedTarget ? (
-                <div className="flex-1 flex flex-col overflow-hidden relative bg-white">
+                <div className="flex-1 flex flex-col overflow-hidden relative bg-white dark:bg-zinc-950">
                     
-                    <div className={`text-xs px-4 py-1.5 font-bold flex items-center gap-1.5 shrink-0 transition-colors ${gpsLoading ? 'bg-slate-100 text-slate-600' : gpsDenied ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                    <div className={`text-xs px-4 py-1.5 font-bold flex items-center gap-1.5 shrink-0 transition-colors ${gpsLoading ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-950 dark:text-zinc-300' : gpsDenied ? 'bg-red-50 text-red-600 dark:bg-zinc-950 dark:text-red-400' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'}`}>
                         {gpsLoading ? (
                             <><span className="text-[10px] animate-pulse">⏳</span> 현재 위치 정보를 확인하는 중입니다...</>
                         ) : gpsDenied ? (
@@ -257,7 +257,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                         )}
                     </div>
 
-                    <div className="px-4 pt-3 pb-2 shrink-0 bg-white z-10">
+                    <div className="px-4 pt-3 pb-2 shrink-0 bg-white dark:bg-zinc-950 z-10">
                         <div className="flex gap-2">
                             <input 
                                 type="text" value={keyword} 
@@ -267,9 +267,9 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                                 }} 
                                 onKeyDown={e => e.key === 'Enter' && handleSearch()} 
                                 placeholder="검색어를 입력해주세요." 
-                                className="flex-1 p-3 text-base text-zinc-900 font-medium placeholder-zinc-400 bg-zinc-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" 
+                                className="flex-1 p-3 text-base text-zinc-900 dark:text-zinc-50 font-medium placeholder-zinc-500 bg-zinc-100 dark:bg-zinc-950 rounded-xl outline-none focus:border-zinc-400 transition-shadow" 
                             />
-                            <button onClick={handleSearch} disabled={isLoading} className="px-6 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                            <button onClick={handleSearch} disabled={isLoading} className="shrink-0 px-6 py-3 bg-sky-500 text-white rounded-xl font-bold hover:bg-zinc-800 disabled:opacity-50 transition-colors">
                                 {isLoading ? "..." : "검색"}
                             </button>
                         </div>
@@ -277,26 +277,26 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                         <div className="flex items-center gap-2 mt-3">
                             <button 
                                 onClick={() => setActiveSort('accuracy')}
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSort === 'accuracy' ? 'bg-zinc-800 text-white border-zinc-800' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSort === 'accuracy' ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-900'}`}
                             >
                                 정확도순
                             </button>
                             <button 
                                 onClick={() => setActiveSort('distance')}
                                 disabled={gpsDenied || gpsLoading} 
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-sky-500 text-white border-sky-400' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-900'}`}
                             >
                                 거리순
                             </button>
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto pb-4 relative border-t border-zinc-100">
+                    <div className="flex-1 overflow-y-auto pb-4 relative border-t border-zinc-100 dark:border-zinc-800">
                         
                         {isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 backdrop-blur-sm gap-3">
-                                <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                                <span className="text-sm font-bold text-indigo-500">{gpsLoading ? "위치 정보를 가져오는 중..." : "장소 검색 중..."}</span>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-zinc-950/80 z-10 backdrop-blur-sm gap-3">
+                                <div className="w-8 h-8 border-4 border-zinc-200 border-t-sky-500 rounded-full animate-spin"></div>
+                                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">{gpsLoading ? "위치 정보를 가져오는 중..." : "장소 검색 중..."}</span>
                             </div>
                         )}
 
@@ -312,21 +312,21 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                                 <span className="text-sm font-medium text-center text-zinc-500">위치 권한이 차단되었습니다.<br/>기기 설정에서 권한을 켜주시면<br/>자동으로 화면에 반영됩니다.</span>
                             </div>
                         ) : isDefaultMode && myLocationData && myCoords ? (
-                            <div onClick={handleSelectMyLocation} className="w-full p-8 bg-indigo-50/50 flex flex-col justify-center items-center border-b border-indigo-100/50 cursor-pointer hover:bg-indigo-100 transition-colors">
-                                <span className="text-xs font-extrabold text-indigo-500 mb-3 bg-white px-4 py-2 rounded-full shadow-sm border border-indigo-100 flex items-center gap-1">📍 현재 내 위치 크게 보기 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg></span>
-                                <span className="text-xl font-bold text-zinc-900 text-center leading-tight break-words px-4">{myLocationData.address}</span>
+                            <div onClick={handleSelectMyLocation} className="w-full p-8 bg-sky-50/80 dark:bg-sky-950/30 flex flex-col justify-center items-center border-b border-zinc-200 dark:border-zinc-800 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+                                <span className="text-xs font-extrabold text-zinc-800 dark:text-zinc-200 mb-3 bg-white dark:bg-zinc-950 px-4 py-2 rounded-full shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center gap-1">📍 현재 내 위치 크게 보기 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg></span>
+                                <span className="text-xl font-bold text-zinc-900 dark:text-zinc-50 text-center leading-tight break-words px-4">{myLocationData.address}</span>
                             </div>
                         ) : (
-                            <ul className="divide-y divide-zinc-100">
+                            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
                                 {results.map((loc) => (
-                                    <li key={loc.id} onClick={() => handleSelectLocation(loc)} className="p-4 cursor-pointer flex justify-between hover:bg-indigo-50/50 transition-colors border-l-4 border-transparent hover:border-indigo-500">
+                                    <li key={loc.id} onClick={() => handleSelectLocation(loc)} className="p-4 cursor-pointer flex justify-between hover:bg-sky-50/80 dark:hover:bg-zinc-900 transition-colors border-l-4 border-transparent hover:border-sky-400">
                                         <div className="min-w-0 pr-4 flex-1">
-                                            <p className="text-base font-bold text-zinc-900 break-words leading-tight">{loc.placeName}</p>
-                                            <p className="text-sm text-zinc-500 mt-1.5 break-words leading-snug">{loc.address}</p>
+                                            <p className="text-base font-bold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{loc.placeName}</p>
+                                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5 break-words leading-snug">{loc.address}</p>
                                         </div>
                                         <div className="flex flex-col items-end shrink-0 ml-2">
                                             {activeSort === 'distance' && loc.distance !== undefined && (
-                                                <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-md h-fit text-slate-600 font-bold whitespace-nowrap">
+                                                <span className="text-xs bg-zinc-100 dark:bg-zinc-950 px-2.5 py-1 rounded-md h-fit text-zinc-600 dark:text-zinc-300 font-bold whitespace-nowrap">
                                                     {loc.distance >= 1000 ? `${(loc.distance/1000).toFixed(1)}km` : `${loc.distance}m`}
                                                 </span>
                                             )}
@@ -338,9 +338,9 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                     </div>
                 </div>
             ) : (
-                <div className="flex-1 flex flex-col bg-white overflow-hidden animate-slide-in-right z-30">
-                    <div className="flex items-center p-4 border-b border-zinc-100 shrink-0 bg-white shadow-sm">
-                        <button onClick={() => setSelectedTarget(null)} className="flex items-center text-zinc-600 hover:text-black font-bold px-2 py-1 bg-zinc-100 rounded-lg transition-colors">
+                <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950 overflow-hidden animate-slide-in-right z-30">
+                    <div className="flex items-center p-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 shadow-sm">
+                        <button onClick={() => setSelectedTarget(null)} className="flex items-center text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-zinc-50 font-bold px-2 py-1 bg-zinc-100 dark:bg-zinc-950 rounded-lg transition-colors">
                             <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
                             목록으로 돌아가기
                         </button>
@@ -348,33 +348,33 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
 
                     <div className="flex-1 flex flex-col p-5 overflow-y-auto">
                         <div className="shrink-0 mb-5">
-                            <span className="text-xs font-bold text-indigo-500 mb-1.5 block">
+                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-1.5 block">
                                 {selectedTarget.type === 'myLocation' ? '내 위치 상세 정보' : '🔍 검색된 장소 정보'}
                             </span>
-                            <h2 className="text-2xl font-extrabold text-zinc-900 leading-tight break-words">{selectedTarget.placeName}</h2>
+                            <h2 className="text-2xl font-extrabold text-zinc-900 dark:text-zinc-50 leading-tight break-words">{selectedTarget.placeName}</h2>
                             {selectedTarget.type === 'search' && (
                                 <p className="text-base text-zinc-500 mt-2 break-words leading-snug">{selectedTarget.address}</p>
                             )}
                             {activeSort === 'distance' && selectedTarget.distance !== undefined && selectedTarget.type === 'search' && selectedTarget.distance > 0 && (
-                                <span className="inline-block mt-3 text-sm bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold">
+                                <span className="inline-block mt-3 text-sm bg-sky-50/80 dark:bg-sky-950/30 text-zinc-800 dark:text-zinc-200 px-3 py-1 rounded-full font-bold">
                                     현재 내 위치에서 {selectedTarget.distance >= 1000 ? `${(selectedTarget.distance/1000).toFixed(1)}km` : `${selectedTarget.distance}m`}
                                 </span>
                             )}
                         </div>
 
-                        <div className="flex-1 min-h-[350px] w-full bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 relative shadow-inner">
+                        <div className="flex-1 min-h-[350px] w-full bg-zinc-100 dark:bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 relative shadow-inner">
                             {selectedTarget.mapImageUrl ? (
                                 <img src={selectedTarget.mapImageUrl} className="w-full h-full object-cover" alt="지도 상세" />
                             ) : (
-                                <div className="absolute inset-0 flex items-center justify-center bg-slate-50">
-                                    <span className="text-sm animate-pulse text-slate-400 font-medium">지도 이미지를 불러오는 중...</span>
+                                <div className="absolute inset-0 flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+                                    <span className="text-sm animate-pulse text-zinc-400 dark:text-zinc-500 font-medium">지도 이미지를 불러오는 중...</span>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="p-5 border-t border-zinc-100 shrink-0 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-                        <button onClick={() => setIsSheetOpen(true)} disabled={!selectedTarget.mapImageUrl} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-[0.98] shadow-md shadow-indigo-200">
+                    <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                        <button onClick={() => setIsSheetOpen(true)} disabled={!selectedTarget.mapImageUrl} className="w-full py-4 bg-sky-500 text-white rounded-2xl font-bold text-lg hover:bg-zinc-800 disabled:opacity-50 transition-all active:scale-[0.98] shadow-md">
                             이 장소 대화방에 공유하기
                         </button>
                     </div>
@@ -384,14 +384,14 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
             {isSheetOpen && selectedTarget && (
                 <div className="absolute inset-0 z-[100] flex flex-col justify-end">
                     <div className="absolute inset-0 bg-black/50 transition-opacity" onClick={() => setIsSheetOpen(false)} />
-                    <div className="relative bg-white w-full h-[65%] rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
-                        <div className="flex justify-between items-center p-5 border-b shrink-0">
-                            <h3 className="font-bold text-lg text-zinc-900">어느 대화방에 공유할까요?</h3>
-                            <button onClick={() => setIsSheetOpen(false)} className="text-zinc-500 hover:text-black p-1">닫기</button>
+                    <div className="relative bg-white dark:bg-zinc-950 w-full h-[65%] rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
+                        <div className="flex justify-between items-center p-5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+                            <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-50">어느 대화방에 공유할까요?</h3>
+                            <button onClick={() => setIsSheetOpen(false)} className="text-zinc-500 dark:text-zinc-400 hover:text-black dark:hover:text-zinc-50 p-1">닫기</button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3">
                             {chatRooms.length === 0 ? (
-                                <div className="text-center text-zinc-500 py-10 font-medium">참여 중인 대화방이 없습니다.</div>
+                                <div className="text-center text-zinc-500 dark:text-zinc-400 py-10 font-medium">참여 중인 대화방이 없습니다.</div>
                             ) : (
                                 <ul className="flex flex-col gap-2">
                                     {chatRooms.map(room => {
@@ -399,12 +399,12 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                                         const title = formatChatRoomListTitle(room.participants);
                                         return (
                                             <li key={room.roomId}>
-                                                <button onClick={() => toggleRoomSelection(room.roomId)} className={`w-full flex items-center p-4 rounded-2xl border-2 text-left transition-colors ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-zinc-100 hover:border-zinc-300'}`}>
-                                                    <div className={`w-6 h-6 rounded-md border-2 mr-4 flex items-center justify-center transition-colors ${isSelected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-zinc-300 bg-white'}`}>
+                                                <button onClick={() => toggleRoomSelection(room.roomId)} className={`w-full flex items-center p-4 rounded-2xl border-2 text-left transition-colors ${isSelected ? 'border-sky-400 bg-sky-50/80 dark:bg-sky-950/30' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-800'}`}>
+                                                    <div className={`w-6 h-6 rounded-md border-2 mr-4 flex items-center justify-center transition-colors ${isSelected ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900' : 'border-zinc-300 dark:border-zinc-500 bg-white dark:bg-zinc-950'}`}>
                                                         {isSelected && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 12 12"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 6l3 3 5-5" /></svg>}
                                                     </div>
-                                                    <span className="font-bold text-zinc-900 text-base flex-1 truncate">{title}</span>
-                                                    <span className="ml-2 text-sm text-zinc-500 shrink-0 bg-zinc-100 px-2 py-0.5 rounded-full">{room.participants.length + 1}명</span>
+                                                    <span className="font-bold text-zinc-900 dark:text-zinc-50 text-base flex-1 truncate">{title}</span>
+                                                    <span className="ml-2 text-sm text-zinc-500 dark:text-zinc-300 shrink-0 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 px-2 py-0.5 rounded-full">{room.participants.length + 1}명</span>
                                                 </button>
                                             </li>
                                         );
@@ -413,8 +413,8 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                             )}
                         </div>
                         {selectedRoomIds.length > 0 && (
-                            <div className="p-5 bg-white border-t shrink-0">
-                                <button onClick={executeShare} disabled={isSending} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl text-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg shadow-indigo-200">
+                            <div className="p-5 bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 shrink-0">
+                                <button onClick={executeShare} disabled={isSending} className="w-full py-4 bg-sky-500 text-white font-bold rounded-2xl text-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors shadow-lg">
                                     {isSending ? "전송 중..." : `${selectedRoomIds.length}개 대화방에 전송`}
                                 </button>
                             </div>

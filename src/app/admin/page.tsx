@@ -176,12 +176,11 @@ export default function AdminView() {
                 
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 flex gap-4 items-center">
                     <div className="flex-1 relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">🔍</span>
                         <input 
                             type="text" 
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="사용자 이름 또는 학번으로 검색하세요..."
+                            placeholder="사용자 이름 또는 학번으로 검색하세요."
                             className="w-full bg-zinc-100 pl-11 pr-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-base text-zinc-900"
                         />
                     </div>
