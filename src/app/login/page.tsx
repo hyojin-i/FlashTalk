@@ -555,7 +555,7 @@ export default function SignUpLoginView() {
                 onClick={confirmRegisterStep}
                 className="rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
               >
-                네
+                확인
               </button>
             </div>
           </div>

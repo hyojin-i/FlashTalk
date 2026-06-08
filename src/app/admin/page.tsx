@@ -154,7 +154,6 @@ export default function AdminView() {
             <main className="flex-1 max-w-5xl w-full mx-auto p-6 flex flex-col gap-6">
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 flex gap-4 items-center">
                     <div className="flex-1 relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">🔍</span>
                         <input 
                             type="text" 
                             value={searchQuery}
