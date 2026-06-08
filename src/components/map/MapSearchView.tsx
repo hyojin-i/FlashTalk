@@ -1,4 +1,5 @@
 'use client';
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LocationResult } from '@/adapters/map/MapAdapter';
@@ -41,8 +42,8 @@ interface SelectedTarget {
 
 export default function MapSearchView({ userId, chatRooms, onClose, onSendToRooms }: Props) {
     const router = useRouter();
+    
     const [keyword, setKeyword] = useState('');
-
     const [lastSearchedKeyword, setLastSearchedKeyword] = useState('');
     
     const [isSearched, setIsSearched] = useState(false); 
@@ -78,7 +79,8 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
             navigator.geolocation.getCurrentPosition(
                 async (pos) => {
                     const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                    setMyCoords({ lat, lng }); setGpsDenied(false); 
+                    setMyCoords({ lat, lng }); 
+                    setGpsDenied(false); 
                     try {
                         const res = await fetch(`/api/map?action=gps&lat=${lat}&lng=${lng}`);
                         const data = await res.json();
@@ -87,10 +89,10 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                     } catch (e) { setMyLocationData({ address: "현재 위치", mapImageUrl: "" }); } 
                     finally { setGpsLoading(false); }
                 }, 
-                () => { 
+                (error) => { 
                     setGpsDenied(true); setMyCoords(null); setMyLocationData(null); setGpsLoading(false); 
                 }, 
-                { enableHighAccuracy: true, timeout: 3000, maximumAge: 0 } 
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 } 
             );
         } else { setGpsDenied(true); setGpsLoading(false); }
     }, []);
@@ -99,11 +101,15 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         updateLocation(); 
         
         let permissionStatus: PermissionStatus | null = null;
+        
         if (navigator.permissions && navigator.permissions.query) {
             navigator.permissions.query({ name: 'geolocation' }).then(status => {
                 permissionStatus = status;
                 permissionStatus.onchange = () => {
-                    if (permissionStatus?.state === 'granted') updateLocation();
+                    if (permissionStatus?.state === 'granted') {
+                        setGpsDenied(false);
+                        updateLocation();
+                    }
                     else if (permissionStatus?.state === 'denied') {
                         setGpsDenied(true); setMyCoords(null); setMyLocationData(null); setGpsLoading(false);
                     }
@@ -112,7 +118,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         }
 
         const handleVisibilityChange = () => { if (document.visibilityState === 'visible') updateLocation(); };
-        const handleFocus = () => updateLocation();
+        const handleFocus = () => { updateLocation(); };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('focus', handleFocus);
@@ -170,14 +176,12 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     const executeSearch = useCallback(async (searchQuery: string) => {
         const rawKeyword = searchQuery.trim();
         if (!rawKeyword) {
-            setIsSearched(true); setResults([]); setSelectedTarget(null); return;
+            setIsSearched(false); setResults([]); setSelectedTarget(null); return;
         }
 
         setIsSearched(true);
         setIsLoading(true); 
-        if (gpsLoading) return;
         setSelectedTarget(null);
-        setLastSearchedKeyword(rawKeyword); 
 
         try {
             let finalResults: LocationResult[] = [];
@@ -227,17 +231,20 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
         } finally { 
             setIsLoading(false); 
         }
-    }, [myCoords, myLocationData, gpsDenied, gpsLoading, activeSort]);
+    }, [myCoords, myLocationData, gpsDenied, activeSort]);
 
     const handleSearchClick = () => {
-        executeSearch(keyword);
+        const trimmed = keyword.trim();
+        if (!trimmed) return;
+        setLastSearchedKeyword(trimmed);
+        executeSearch(trimmed);
     };
 
     useEffect(() => {
         if (isSearched && lastSearchedKeyword.trim() !== '' && !gpsLoading) {
             executeSearch(lastSearchedKeyword);
         }
-    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading, activeSort, executeSearch, lastSearchedKeyword]); 
+    }, [gpsDenied, myCoords?.lat, myCoords?.lng, gpsLoading, activeSort, executeSearch, isSearched, lastSearchedKeyword]); 
 
     const handleSelectLocation = async (loc: LocationResult) => {
         setSelectedTarget({
@@ -298,7 +305,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
     };
 
     const isDefaultMode = !isSearched || !lastSearchedKeyword.trim(); 
-    const isNoResults = isSearched && lastSearchedKeyword.trim() && !isLoading && results.length === 0;
+    const isNoResults = isSearched && !!lastSearchedKeyword.trim() && !isLoading && results.length === 0;
 
     return (
         <div className="fixed inset-0 z-[80] flex flex-col bg-zinc-50 dark:bg-zinc-950 animate-slide-up overflow-hidden">
@@ -316,25 +323,49 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                         {gpsLoading ? (
                             <><span className="text-[10px] animate-pulse">⏳</span> 현재 위치 정보를 확인하는 중입니다...</>
                         ) : gpsDenied ? (
-                            <><span className="text-[10px]"></span> 위치 권한 차단됨</>
+                            <><span className="text-[10px]">🚫</span> 위치 권한 차단됨</>
                         ) : (
-                            <><span className="text-[10px]"></span> 현재 위치 활성화됨</>
+                            <><span className="text-[10px]">📍</span> 현재 위치 활성화됨</>
                         )}
                     </div>
 
                     <div className="px-4 pt-3 pb-2 shrink-0 bg-white dark:bg-zinc-950 z-10">
                         <div className="flex gap-2">
-                            <input 
-                                type="text" value={keyword} 
-                                onChange={e => { 
-                                    setKeyword(e.target.value); 
-                                    if (e.target.value === '') { setResults([]); setIsSearched(false); setLastSearchedKeyword(''); } 
-                                }} 
-                                onKeyDown={e => e.key === 'Enter' && handleSearchClick()} 
-                                placeholder="검색어를 입력해주세요." 
-                                className="flex-1 p-3 text-base text-zinc-900 dark:text-zinc-50 font-medium placeholder-zinc-500 bg-zinc-100 dark:bg-zinc-950 rounded-xl outline-none focus:border-zinc-400 transition-shadow" 
-                            />
-                            <button onClick={handleSearchClick} disabled={isLoading || !keyword.trim()} className="shrink-0 px-6 py-3 bg-sky-500 text-white rounded-xl font-bold hover:bg-zinc-800 disabled:opacity-50 transition-colors">
+                            <div className="flex-1 relative flex items-center bg-zinc-100 dark:bg-zinc-950 rounded-xl outline-none focus-within:ring-2 focus-within:ring-sky-500/50 transition-shadow border border-transparent dark:border-zinc-800">
+                                <input 
+                                    type="text" 
+                                    value={keyword} 
+                                    onChange={e => { 
+                                        setKeyword(e.target.value); 
+                                        if (e.target.value.trim() === '') { setResults([]); setIsSearched(false); } 
+                                    }} 
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && keyword.trim() !== '') handleSearchClick();
+                                    }} 
+                                    maxLength={100} 
+                                    placeholder="검색어를 입력해주세요." 
+                                    className="w-full p-3 pr-10 text-base text-zinc-900 dark:text-zinc-50 font-medium placeholder-zinc-500 bg-transparent outline-none" 
+                                />
+                                
+                                {keyword && (
+                                    <button 
+                                        onClick={() => {
+                                            setKeyword('');
+                                            setResults([]);
+                                            setIsSearched(false);
+                                        }}
+                                        className="absolute right-3 p-1 rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                                        aria-label="검색어 지우기"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                )}
+                            </div>
+                            <button 
+                                onClick={handleSearchClick} 
+                                disabled={isLoading || !keyword.trim()} 
+                                className="shrink-0 px-6 py-3 bg-sky-500 text-white rounded-xl font-bold hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
                                 {isLoading ? "..." : "검색"}
                             </button>
                         </div>
@@ -349,7 +380,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                             <button 
                                 onClick={() => setActiveSort('distance')}
                                 disabled={gpsDenied || gpsLoading} 
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-900'}`}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${activeSort === 'distance' ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-900'}`}
                             >
                                 거리순
                             </button>
@@ -373,8 +404,10 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                             <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400"><span className="text-sm font-medium animate-pulse">위치를 찾는 중입니다...</span></div>
                         ) : isDefaultMode && gpsDenied ? (
                             <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400">
-                                <span className="text-4xl mb-4">🚫</span>
-                                <span className="text-sm font-medium text-center text-zinc-500">위치 권한이 차단되었습니다.<br/>기기 설정에서 권한을 켜주시면<br/>자동으로 화면에 반영됩니다.</span>
+                                <span className="text-4xl mb-4 opacity-50">🔍</span>
+                                <span className="text-sm font-medium text-center text-zinc-500 leading-relaxed">
+                                    현재 위치를 알 수 없습니다.<br/>상단의 검색창에 장소명을 입력하여 찾아보세요.
+                                </span>
                             </div>
                         ) : isDefaultMode && myLocationData && myCoords ? (
                             <div onClick={handleSelectMyLocation} className="w-full p-8 bg-sky-50/80 dark:bg-sky-950/30 flex flex-col justify-center items-center border-b border-zinc-200 dark:border-zinc-800 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
@@ -421,7 +454,7 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
                     <div className="flex-1 flex flex-col p-5 overflow-y-auto">
                         <div className="shrink-0 mb-5">
                             <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-1.5 block">
-                                {selectedTarget.type === 'myLocation' ? '내 위치 상세 정보' : '🔍 검색된 장소 정보'}
+                                {selectedTarget.type === 'myLocation' ? '📍 내 위치 상세 정보' : '🔍 검색된 장소 정보'}
                             </span>
                             <h2 className="text-2xl font-extrabold text-zinc-900 dark:text-zinc-50 leading-tight break-words">{selectedTarget.placeName}</h2>
                             {selectedTarget.type === 'search' && (
@@ -496,12 +529,30 @@ export default function MapSearchView({ userId, chatRooms, onClose, onSendToRoom
             )}
             
             <style jsx>{`
-                .back-to-list-btn { border: 1px solid transparent; transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
-                .back-to-list-btn:hover { transform: translateX(-2px); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border-color: rgba(0, 0, 0, 0.08); }
-                .back-to-list-btn:active { transform: translateX(-1px) scale(0.98); }
-                .back-to-list-arrow { transition: transform 0.2s ease; }
-                .back-to-list-btn:hover .back-to-list-arrow { transform: translateX(-3px); }
-                @media (prefers-color-scheme: dark) { .back-to-list-btn:hover { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5); border-color: rgba(255, 255, 255, 0.18); } }
+                .back-to-list-btn {
+                    border: 1px solid transparent;
+                    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+                }
+                .back-to-list-btn:hover {
+                    transform: translateX(-2px);
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                    border-color: rgba(0, 0, 0, 0.08);
+                }
+                .back-to-list-btn:active {
+                    transform: translateX(-1px) scale(0.98);
+                }
+                .back-to-list-arrow {
+                    transition: transform 0.2s ease;
+                }
+                .back-to-list-btn:hover .back-to-list-arrow {
+                    transform: translateX(-3px);
+                }
+                @media (prefers-color-scheme: dark) {
+                    .back-to-list-btn:hover {
+                        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+                        border-color: rgba(255, 255, 255, 0.18);
+                    }
+                }
                 .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
                 @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }

@@ -142,21 +142,6 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         }
     };
 
-    useEffect(() => {
-        if (!aiResponse) return;
-        let index = 0;
-        const speed = 10; 
-        const intervalId = setInterval(() => {
-            setDisplayedResponse(aiResponse.slice(0, index));
-            index++;
-            if (index > aiResponse.length) {
-                clearInterval(intervalId);
-            }
-        }, speed);
-
-        return () => clearInterval(intervalId); 
-    }, [aiResponse]);
-
     const handleClearPrompt = () => {
         setPrompt('');
         setAiResponse(null);
@@ -356,10 +341,10 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                         )}
 
                         {aiResponse && !isLoading && !aiError && (
-                            <div className="text-zinc-950 whitespace-pre-wrap leading-[1.8] text-[16px] font-bold">
-                                {displayedResponse}
-                            </div>
-                        )}
+    <div className="text-zinc-950 whitespace-pre-wrap leading-[1.8] text-[16px] font-bold">
+        {aiResponse} 
+    </div>
+)}
                     </div>
                 </div>
             </main>
