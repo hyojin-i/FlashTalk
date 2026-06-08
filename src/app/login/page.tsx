@@ -418,7 +418,7 @@ export default function SignUpLoginView() {
               required
             />
             {loginError && (
-              <p className="text-sm text-red-600 dark:text-red-400">
+              <p className="min-w-max self-center text-center text-sm text-red-600 whitespace-nowrap dark:text-red-400">
                 {loginError}
               </p>
             )}

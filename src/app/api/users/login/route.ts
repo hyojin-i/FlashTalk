@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   } catch (e) {
     if (e instanceof UserNotFoundError) {
       return NextResponse.json(
-        { ok: false, error: "User not found for the given studentId and universityName" },
+        { ok: false, error: "입력한 정보가 일치하지 않습니다. 학번과 학교명을 확인하여 주세요." },
         { status: 404 }
       );
     }
