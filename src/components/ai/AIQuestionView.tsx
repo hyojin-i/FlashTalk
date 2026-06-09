@@ -44,6 +44,9 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     
     const [usedQuota, setUsedQuota] = useState<number>(0);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const onCloseRef = useRef(onClose);
+    const closedByPopStateRef = useRef(false);
+    onCloseRef.current = onClose;
     
     useEffect(() => {
         if (typeof window !== 'undefined' && userId){
@@ -67,6 +70,27 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     useEffect(() => {
         return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
     }, []);
+
+    useEffect(() => {
+        window.history.pushState({ aiQuestionView: true }, '', window.location.href);
+
+        const handlePopState = () => {
+            closedByPopStateRef.current = true;
+            onCloseRef.current();
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    const handleClose = () => {
+        if (closedByPopStateRef.current) {
+            closedByPopStateRef.current = false;
+            onClose();
+            return;
+        }
+        window.history.back();
+    };
 
     const checkAiConnection = async (model: string) => {
         setAiStatus('checking');
@@ -289,7 +313,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             <option value="gemini-flash-latest">Gemini Flash Latest</option>
                         </select>
                     </div>
-                    <button onClick={onClose} className="flex items-center gap-1.5 px-4 py-2 bg-white text-zinc-800 hover:text-white hover:bg-zinc-900 border-2 border-zinc-300 rounded-xl text-[14px] font-black transition-colors shadow-sm ml-2">
+                    <button type="button" onClick={handleClose} className="flex items-center gap-1.5 px-4 py-2 bg-white text-zinc-800 hover:text-white hover:bg-zinc-900 border-2 border-zinc-300 rounded-xl text-[14px] font-black transition-colors shadow-sm ml-2">
                         화면 닫기
                     </button>
                 </header>
