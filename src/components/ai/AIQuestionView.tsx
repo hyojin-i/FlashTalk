@@ -56,7 +56,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     const remainQuota = Math.max(0, MAX_AI_QUOTA - usedQuota);
     const isQuotaExceeded = remainQuota <= 0;
 
-    const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false); 
+    const [isRoomListOpen, setIsRoomListOpen] = useState(false); 
     const [roomSearchKeyword, setRoomSearchKeyword] = useState('');
     const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
     const [isSending, setIsSending] = useState(false);
@@ -84,12 +84,12 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         }
 
         if (!prompt.trim()) {
-            setAiError("프롬프트(질문 내용)를 입력해주세요!");
+            setAiError("프롬프트(질문 내용)를 입력해주세요.");
             return;
         }
         
         if (isQuotaExceeded) {
-            alert(`⚠️ 일일 질문 할당량(${MAX_AI_QUOTA}회)을 모두 소진했습니다! 내일 다시 이용해주세요.`);
+            alert(`일일 질문 할당량(${MAX_AI_QUOTA}회)을 모두 소진했습니다. 내일 다시 이용해주세요.`);
             return;
         }
 
@@ -150,8 +150,14 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     };
 
     const requestShareAiResponse = async () => {
-        if (selectedRoomIds.length === 0) return alert("왼쪽 목록에서 공유할 대화방을 1개 이상 선택해주세요.");
-        if (!aiResponse) return alert("먼저 AI 답변을 생성해주세요.");
+        if (!aiResponse || !!aiError) {
+            alert("생성된 답변이 없습니다.\nAI 답변을 먼저 생성한 후 대화방에 공유할 수 있습니다.");
+            return;
+        }
+        if (selectedRoomIds.length === 0) {
+            alert("왼쪽 목록에서 공유할 대화방을 1개 이상 선택해주세요.");
+            return;
+        }
 
         const aiPayload = { prompt: submittedPrompt, response: aiResponse, model: submittedModel };
         const aiMsg = MessageFactory.createMessage('ai_prompt' as any, aiPayload as any, userId, "temp");
@@ -161,7 +167,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
         try {
             await onSendToRooms(selectedRoomIds, aiMsg);
             setSelectedRoomIds([]);
-            setIsSidebarOpenMobile(false);
+            setIsRoomListOpen(false);
         } finally {
             setIsSending(false);
         }
@@ -176,73 +182,94 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     }, [chatRooms, roomSearchKeyword]);
 
     return (
-        <div className="fixed inset-0 z-[100] flex bg-zinc-100 animate-slide-up overflow-hidden text-zinc-900">
-            
-            <aside className={`absolute md:relative z-30 w-80 h-full bg-white border-r-2 border-zinc-300 flex flex-col shrink-0 transition-transform duration-300 ${isSidebarOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
-                <div className="flex items-center justify-between p-4 border-b-2 border-zinc-200 shrink-0 bg-indigo-100">
-                    <h2 className="font-black text-[16px] text-indigo-950">결과를 공유할 대화방 선택</h2>
-                    <span className="text-sm font-extrabold text-indigo-700 bg-white px-2.5 py-1 rounded-md shadow-sm border border-indigo-200">{selectedRoomIds.length}개 선택됨</span>
-                </div>
-                
-                <div className="p-3 border-b-2 border-zinc-200 shrink-0 bg-zinc-50">
-                    <input 
-                        type="text" placeholder="대화방 이름을 검색해주세요." value={roomSearchKeyword} onChange={e => setRoomSearchKeyword(e.target.value)}
-                        className="w-full bg-white px-3 py-2.5 rounded-xl text-sm font-bold text-zinc-900 border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all placeholder:text-zinc-500 placeholder:font-semibold shadow-inner"
-                    />
-                </div>
-                
-                <ul className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar bg-white">
-                    {filteredRooms.length === 0 ? (
-                        <li className="text-center text-sm text-zinc-600 py-10 font-bold bg-zinc-50 rounded-xl m-2 border border-zinc-200">진행 중인 대화방이 없습니다.</li>
-                    ) : (
-                        filteredRooms.map(room => {
-                            const canSelect = !!aiResponse && !aiError && !isLoading; 
-                            const isSelected = selectedRoomIds.includes(room.roomId);
+        <div className="fixed inset-0 z-[100] flex flex-row bg-zinc-100 animate-slide-up overflow-hidden text-zinc-900">
+            <aside
+                aria-hidden={!isRoomListOpen}
+                className={`h-full shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${
+                    isRoomListOpen ? 'w-80 border-r-2 border-zinc-300' : 'w-0 border-r-0'
+                }`}
+            >
+                <div className="flex h-full w-80 flex-col bg-white">
+                    <div className="flex items-center justify-between p-4 border-b-2 border-zinc-200 shrink-0 bg-indigo-100">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <h2 className="font-black text-[16px] text-indigo-950 shrink-0">공유할 대화방 선택</h2>
+                            <span className="text-sm font-extrabold text-indigo-700 bg-white px-2.5 py-1 rounded-md shadow-sm border border-indigo-200 whitespace-nowrap">{selectedRoomIds.length}개 선택됨</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsRoomListOpen(false)}
+                            className="ml-2 p-1.5 rounded-lg text-indigo-900 hover:bg-indigo-200/60 transition-colors shrink-0"
+                            aria-label="대화방 목록 닫기"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div className="p-3 border-b-2 border-zinc-200 shrink-0 bg-zinc-50">
+                        <input 
+                            type="text" placeholder="대화방 이름을 검색해주세요." value={roomSearchKeyword} onChange={e => setRoomSearchKeyword(e.target.value)}
+                            className="w-full bg-white px-3 py-2.5 rounded-xl text-sm font-bold text-zinc-900 border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all placeholder:text-zinc-500 placeholder:font-semibold shadow-inner"
+                        />
+                    </div>
+                    
+                    <ul className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 custom-scrollbar bg-white">
+                        {filteredRooms.length === 0 ? (
+                            <li className="text-center text-sm text-zinc-600 py-10 font-bold bg-zinc-50 rounded-xl m-2 border border-zinc-200">진행 중인 대화방이 없습니다.</li>
+                        ) : (
+                            filteredRooms.map(room => {
+                                const isSelected = selectedRoomIds.includes(room.roomId);
 
-                            return (
-                                <li 
-                                    key={room.roomId} 
-                                    className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all shadow-sm
-                                        ${!canSelect ? 'cursor-not-allowed opacity-50 bg-zinc-100 border-zinc-200' : 'cursor-pointer hover:border-indigo-300'}
-                                        ${isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-zinc-200 bg-white'}
-                                    `} 
-                                    onClick={() => {
-                                        if (canSelect) toggleRoomSelection(room.roomId);
-                                    }}
-                                >
-                                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 shrink-0 transition-colors 
-                                            ${isSelected ? 'bg-indigo-700 border-indigo-700' : 'bg-white border-zinc-400'}`}
-                                        >
-                                            {isSelected && <svg className="w-3.5 h-3.5 text-white font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                return (
+                                    <li 
+                                        key={room.roomId} 
+                                        className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all shadow-sm cursor-pointer hover:border-indigo-300 ${
+                                            isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-zinc-200 bg-white'
+                                        }`}
+                                        onClick={() => toggleRoomSelection(room.roomId)}
+                                    >
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className={`room-checkbox ${isSelected ? 'room-checkbox-selected' : ''}`}>
+                                                {isSelected && (
+                                                    <svg className="room-checkbox-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                            <span className="truncate text-[15px] font-extrabold flex-1 text-zinc-950">
+                                                {formatChatRoomListTitle(room.participants)}
+                                            </span>
                                         </div>
-                                        <span className="truncate text-[15px] font-extrabold flex-1 text-zinc-950">
-                                            {formatChatRoomListTitle(room.participants)}
-                                        </span>
-                                    </div>
-                                </li>
-                            );
-                        })
-                    )}
-                </ul>
+                                    </li>
+                                );
+                            })
+                        )}
+                    </ul>
 
-                <div className="p-4 border-t-2 border-zinc-200 bg-zinc-50 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.08)]">
-                    <button 
-                        onClick={requestShareAiResponse} 
-                        disabled={isSending || !aiResponse || !!aiError || selectedRoomIds.length === 0} 
-                        className="w-full py-4 bg-indigo-700 text-white rounded-xl font-black text-[15px] tracking-wide hover:bg-indigo-800 disabled:bg-zinc-400 disabled:text-zinc-100 disabled:border-zinc-400 disabled:opacity-80 transition-all active:scale-[0.98] shadow-lg shadow-indigo-300 border-2 border-indigo-800"
-                    >
-                        {isSending ? "전송 중..." : selectedRoomIds.length === 0 ? "대화방을 먼저 선택하세요" : `${selectedRoomIds.length}개 방에 전송하기`}
-                    </button>
+                    <div className="p-4 border-t-2 border-zinc-200 bg-zinc-50 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.08)]">
+                        <button 
+                            type="button"
+                            onClick={requestShareAiResponse} 
+                            disabled={isSending}
+                            className="ai-share-btn"
+                        >
+                            {isSending ? "전송 중..." : "대화방 공유"}
+                        </button>
+                    </div>
                 </div>
             </aside>
 
-            <main className="flex-1 flex flex-col min-w-0 bg-[#fdfdfd] relative z-10">
-                {isSidebarOpenMobile && <div className="absolute inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsSidebarOpenMobile(false)} />}
-
+            <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#fdfdfd]">
                 <header className="flex items-center h-16 px-4 bg-white border-b-2 border-zinc-200 shrink-0 justify-between shadow-sm">
                     <div className="flex items-center">
-                        <button onClick={() => setIsSidebarOpenMobile(true)} className="md:hidden mr-3 p-2 bg-zinc-100 border border-zinc-300 text-zinc-800 hover:bg-zinc-200 transition-colors rounded-lg font-bold">
+                        <button
+                            type="button"
+                            onClick={() => setIsRoomListOpen((open) => !open)}
+                            aria-label={isRoomListOpen ? '대화방 목록 닫기' : '대화방 목록 열기'}
+                            aria-expanded={isRoomListOpen}
+                            className="mr-3 p-2 bg-zinc-100 border border-zinc-300 text-zinc-800 hover:bg-zinc-200 transition-colors rounded-lg font-bold"
+                        >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                         </button>
                         <h1 className="text-xl font-black flex items-center gap-2 text-zinc-950 tracking-tight">
@@ -267,9 +294,9 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     </button>
                 </header>
 
-                <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden gap-5 max-w-4xl mx-auto w-full">
+                <div className="ai-content-layout flex-1 min-h-0 p-4 sm:p-6 max-w-4xl mx-auto w-full">
                     
-                    <div className="flex flex-col gap-2 shrink-0">
+                    <div className="space-y-2">
                         <div className="flex justify-between items-end mb-1 px-1">
                             <label className="text-[15px] font-black text-zinc-950 flex items-center gap-2 tracking-tight">
                                 AI에게 질문해주세요.
@@ -286,40 +313,42 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             onKeyDown={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                                     e.preventDefault();
-                                    if (!isQuotaExceeded && !isLoading && prompt.trim() && aiStatus !== 'offline') requestAiAnswer();
+                                    if (!isLoading && prompt.trim() && aiStatus !== 'offline') requestAiAnswer();
                                 }
                             }}
-                            disabled={isQuotaExceeded || isLoading}
-                            placeholder={isQuotaExceeded ? "⚠️ 일일 할당량을 모두 소진했습니다. 내일 다시 시도해주세요." : "(Ctrl + Enter 키로 바로 전송 가능)"}
-                            className={`w-full h-36 p-5 bg-white border-2 rounded-2xl resize-none outline-none transition-all shadow-sm text-[16px] leading-relaxed font-bold text-zinc-950 placeholder:font-semibold placeholder:text-zinc-400 ${isQuotaExceeded ? 'border-red-400 bg-red-50/50 text-red-900 cursor-not-allowed placeholder:text-red-500' : 'border-zinc-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100'}`}
+                            disabled={isLoading}
+                            placeholder="(Ctrl + Enter 키로 바로 전송 가능)"
+                            className={`w-full h-36 p-5 bg-white border-2 rounded-2xl resize-none outline-none transition-all shadow-sm text-[16px] leading-relaxed font-bold text-zinc-950 placeholder:font-semibold placeholder:text-zinc-400 ${isQuotaExceeded ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' : 'border-zinc-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100'}`}
                         />
-                        
-                        <div className="flex gap-3 mt-1">
-                            <button onClick={handleClearPrompt} disabled={isLoading || (!prompt && !aiResponse && !aiError)} className="px-6 py-4 bg-white text-zinc-800 border-2 border-zinc-300 rounded-2xl font-black text-[15px] hover:bg-zinc-100 hover:border-zinc-400 transition-colors disabled:bg-zinc-100 disabled:text-zinc-400 disabled:border-zinc-200 shadow-sm">
-                                초기화
-                            </button>
-                            {isLoading ? (
-                                <button 
-                                    onClick={handleCancelGeneration} 
-                                    className="flex-1 py-4 rounded-2xl font-black text-[16px] tracking-wide transition-all shadow-md bg-red-600 text-white hover:bg-red-700 border-2 border-red-700 animate-pulse"
-                                >
-                                    생성 중단하기
-                                </button>
-                            ) : (
-                                <button 
-                                    onClick={requestAiAnswer} 
-                                    disabled={!prompt.trim() || aiStatus === 'offline' || isQuotaExceeded}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-[16px] tracking-wide transition-all active:scale-[0.99] shadow-md border-2 ${isQuotaExceeded ? 'bg-zinc-200 text-zinc-500 border-zinc-300 cursor-not-allowed shadow-none' : 'bg-zinc-950 text-white border-black hover:bg-zinc-800'}`}
-                                >
-                                    {isQuotaExceeded ? "할당량 초과됨" : "답변 생성하기"}
-                                </button>
-                            )}
-                        </div>
                     </div>
 
-                    <div className="flex-1 bg-white border-2 border-zinc-200 rounded-2xl p-6 sm:p-8 overflow-y-auto relative custom-scrollbar shadow-inner">
+                    <div className="ai-action-row">
+                        <button
+                            type="button"
+                            onClick={handleClearPrompt}
+                            disabled={isLoading || (!prompt && !aiResponse && !aiError)}
+                            className="ai-btn-reset"
+                        >
+                            초기화
+                        </button>
+                        {isLoading ? (
+                            <button type="button" onClick={handleCancelGeneration} className="ai-btn-submit ai-btn-cancel">
+                                생성 중단하기
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={requestAiAnswer}
+                                className="ai-btn-submit ai-btn-generate"
+                            >
+                                답변 생성하기
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="ai-response-panel bg-white border-2 border-zinc-200 rounded-2xl custom-scrollbar shadow-inner">
                         {!aiResponse && !aiError && !isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 text-center px-4 bg-zinc-50/50 rounded-2xl m-2 border-2 border-dashed border-zinc-200">
+                            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center text-zinc-400 text-center px-4 py-8 m-2 border-2 border-dashed border-zinc-200 rounded-2xl bg-zinc-50/50">
                                 <span className="text-6xl mb-4">💡</span>
                                 <span className="text-[15px] font-extrabold text-zinc-500 leading-relaxed">
                                     질문을 입력하고 <span className="text-zinc-800">답변 생성하기</span> 버튼(또는 Ctrl + Enter)을 눌러주세요.
@@ -328,28 +357,143 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                         )}
 
                         {isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-600 gap-5 bg-indigo-50/30 rounded-2xl">
+                            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center text-indigo-600 gap-5 bg-indigo-50/30 rounded-2xl px-4 py-8">
                                 <div className="w-12 h-12 border-[5px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin shadow-sm"></div>
-                                <span className="font-black text-[15px] animate-pulse tracking-wide bg-white px-4 py-2 rounded-xl shadow-sm border border-indigo-100">데이터를 처리하는 중입니다...</span>
+                                <span className="font-black text-[15px] animate-pulse tracking-wide bg-white px-4 py-2 rounded-xl shadow-sm border border-indigo-100">AI 답변 생성 중입니다. 잠시만 기다려주세요...</span>
                             </div>
                         )}
                         {aiError && !isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-red-600 gap-4 px-6 text-center bg-red-50 rounded-2xl m-2 border border-red-200">
-                                <span className="text-5xl">⚠️</span>
+                            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center text-red-600 gap-4 px-6 py-8 text-center bg-red-50 rounded-2xl m-2 border border-red-200">
                                 <span className="font-black text-[15px] bg-white px-5 py-3 rounded-xl shadow-sm border-2 border-red-200">{aiError}</span>
                             </div>
                         )}
 
                         {aiResponse && !isLoading && !aiError && (
-    <div className="text-zinc-950 whitespace-pre-wrap leading-[1.8] text-[16px] font-bold">
-        {aiResponse} 
-    </div>
-)}
+                            <div className="p-6 sm:p-8 text-zinc-950 whitespace-pre-wrap leading-[1.8] text-[16px] font-bold">
+                                {aiResponse}
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>
-            
+
             <style jsx>{`
+                .room-checkbox {
+                    width: 1.25rem;
+                    height: 1.25rem;
+                    border: 2px solid #a1a1aa;
+                    border-radius: 0.25rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    background: #ffffff;
+                    transition: background-color 0.15s, border-color 0.15s;
+                }
+                .room-checkbox-selected {
+                    background: #4338ca;
+                    border-color: #4338ca;
+                }
+                .room-checkbox-icon {
+                    width: 0.875rem;
+                    height: 0.875rem;
+                    color: #ffffff;
+                }
+                .ai-share-btn {
+                    width: 100%;
+                    padding: 1rem 1.5rem;
+                    background: #4338ca;
+                    color: #ffffff;
+                    border: 2px solid #3730a3;
+                    border-radius: 0.75rem;
+                    font-size: 15px;
+                    font-weight: 900;
+                    letter-spacing: 0.025em;
+                    cursor: pointer;
+                    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+                    transition: background-color 0.15s, opacity 0.15s;
+                }
+                .ai-share-btn:hover:not(:disabled) {
+                    background: #3730a3;
+                }
+                .ai-share-btn:disabled {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                }
+                .ai-content-layout {
+                    display: grid;
+                    grid-template-rows: auto auto minmax(0, 1fr);
+                    gap: 1.25rem;
+                    overflow: hidden;
+                }
+                .ai-action-row {
+                    display: flex;
+                    flex-direction: row;
+                    align-items: stretch;
+                    gap: 0.75rem;
+                    width: 100%;
+                    position: relative;
+                    z-index: 30;
+                }
+                .ai-btn-reset {
+                    flex: 0 0 auto;
+                    padding: 1rem 1.5rem;
+                    background: #ffffff;
+                    color: #27272a;
+                    border: 2px solid #d4d4d8;
+                    border-radius: 1rem;
+                    font-size: 15px;
+                    font-weight: 900;
+                    white-space: nowrap;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    cursor: pointer;
+                }
+                .ai-btn-reset:hover:not(:disabled) {
+                    background: #f4f4f5;
+                    border-color: #a1a1aa;
+                }
+                .ai-btn-reset:disabled {
+                    background: #f4f4f5;
+                    color: #a1a1aa;
+                    border-color: #e4e4e7;
+                    cursor: not-allowed;
+                }
+                .ai-btn-submit {
+                    flex: 1 1 auto;
+                    padding: 1rem 1.5rem;
+                    border-radius: 1rem;
+                    font-size: 16px;
+                    font-weight: 900;
+                    letter-spacing: 0.025em;
+                    border: 2px solid transparent;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                    cursor: pointer;
+                }
+                .ai-btn-generate {
+                    background: #000000;
+                    color: #ffffff;
+                    border-color: #3730a3;
+                }
+                .ai-btn-generate:hover {
+                    background: #3730a3;
+                }
+                .ai-btn-generate:disabled {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                }
+                .ai-btn-cancel {
+                    background: #dc2626;
+                    color: #ffffff;
+                    border-color: #b91c1c;
+                    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                }
+                .ai-btn-cancel:hover {
+                    background: #b91c1c;
+                }
+                .ai-response-panel {
+                    min-height: 0;
+                    overflow-y: auto;
+                }
                 .custom-scrollbar::-webkit-scrollbar { width: 8px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #a1a1aa; border-radius: 10px; border: 2px solid white; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
