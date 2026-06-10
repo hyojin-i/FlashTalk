@@ -28,17 +28,20 @@ export default function AiChatBubble({ message, isMe, senderName }: AiChatBubble
     const displayResponse = message.response || "⚠️ AI 답변을 불러오지 못했습니다.";
 
     return (
-        <div className={`flex flex-col gap-0 max-w-[280px] sm:max-w-[360px] shadow-[0_4px_12px_rgba(0,0,0,0.05)] rounded-2xl overflow-hidden border border-zinc-200/80 bg-white ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}>
+        <div
+            style={{ width: '350px', maxWidth: '90vw' }}
+            className={`flex flex-col gap-0 shadow-md rounded-2xl overflow-hidden border border-zinc-200/80 bg-white ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
+        >
             
-            <div className="bg-zinc-900 text-white p-3.5 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-white/5 rounded-bl-full"></div>
-                <div className="flex items-center gap-1.5 mb-2 opacity-90 relative z-10">
+            <div className="bg-zinc-900 text-white p-3.5 ml-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 ml-3 h-16 bg-white/5 rounded-bl-full"></div>
+                <div className="flex items-center gap-1.5 mb-2 ml-3 opacity-90 relative z-10">
                     <span className="text-sm">💭</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">
+                    <span className="text-[10px] font-bold ml-3 uppercase tracking-wider text-zinc-300">
                         {isMe ? '나의 프롬프트' : `${senderName}의 프롬프트`}
                     </span>
                 </div>
-                <p className="text-[13.5px] leading-relaxed break-words font-medium text-zinc-50 relative z-10">
+                <p className="text-[13.5px] ml-3 leading-relaxed break-words font-medium text-zinc-50 relative z-10 ml-3">
                     {displayPrompt}
                 </p>
             </div>
@@ -51,7 +54,10 @@ export default function AiChatBubble({ message, isMe, senderName }: AiChatBubble
                     </span>
                 </div>
                 
-                <div className="whitespace-pre-wrap leading-relaxed break-words text-[13.5px] font-medium text-zinc-800 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                <div
+                    style={{ maxHeight: '50vh' }}
+                    className="whitespace-pre-wrap leading-relaxed break-words text-sm font-medium text-zinc-800 overflow-y-auto pr-2 custom-scrollbar"
+                >
                     {displayResponse}
                 </div>
             </div>
