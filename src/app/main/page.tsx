@@ -130,6 +130,7 @@ export default function MainView() {
     roomLeaveUi,
     refreshRooms,
     ensureRoomChannel,
+    receiveMessage,
     disconnectAllSockets,
     setPendingInviteEntryRoomId,
   } = useGlobalSocket();
@@ -582,25 +583,48 @@ export default function MainView() {
     const token = readStoredToken();
     if (!token) return;
 
+    let successCount = 0;
     await Promise.all(
         roomIds.map(async (id) => {
             try {
-                await fetch("/api/chat", {
+                const res = await fetch("/api/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                     body: JSON.stringify({
                         roomId: id,
                         type: "map",
-                        content: JSON.stringify(mapMessage.getContent()) 
+                        content: JSON.stringify(mapMessage.getContent())
                     }),
                 });
+
+                let data: { ok?: boolean; message?: unknown; error?: string } = {};
+                try {
+                    data = (await res.json()) as typeof data;
+                } catch {
+                    /* ignore */
+                }
+
+                if (!res.ok) {
+                    console.error(`${id} 방 전송 실패`, data.error ?? res.status);
+                    return;
+                }
+
+                successCount += 1;
+                if (data.message) {
+                    receiveMessage(id, data.message);
+                }
             } catch (e) {
                 console.error(`${id} 방 전송 실패`, e);
             }
         })
     );
     loadChatRoomList();
-    alert(`선택한 ${roomIds.length}개의 대화방에 지도를 전송했습니다.`);
+
+    if (successCount > 0) {
+        alert(`선택한 ${successCount}개의 대화방에 지도를 전송했습니다.`);
+    } else {
+        alert("지도 전송에 실패했습니다. 네트워크 상태를 확인한 후 다시 시도해 주세요.");
+    }
   };
 
   const handleSendAiToMultipleRooms = async (roomIds: string[], aiMessage: any) => {
@@ -617,10 +641,26 @@ export default function MainView() {
             body: JSON.stringify({
               roomId: id,
               type: "ai_prompt",
-              content: aiMessage.getContent() 
+              content: aiMessage.getContent()
             }),
           });
-          if (res.ok) successCount++;
+
+          let data: { ok?: boolean; message?: unknown; error?: string } = {};
+          try {
+            data = (await res.json()) as typeof data;
+          } catch {
+            /* ignore */
+          }
+
+          if (!res.ok) {
+            console.error(`${id} 방 AI 전송 실패`, data.error ?? res.status);
+            return;
+          }
+
+          successCount++;
+          if (data.message) {
+            receiveMessage(id, data.message);
+          }
         } catch (e) {
           console.error(`${id} 방 AI 전송 실패`, e);
         }
@@ -629,7 +669,7 @@ export default function MainView() {
     loadChatRoomList();
     
     if (successCount > 0) {
-        alert(`선택한 ${successCount}개의 대화방에 AI 결과를 전송했습니다!`);
+        alert(`선택한 ${successCount}개의 대화방에 AI 답변을 전송했습니다.`);
     } else {
         alert("전송에 실패했습니다. AI 답변이 제대로 생성되었는지 확인해주세요.");
     }

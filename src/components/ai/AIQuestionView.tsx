@@ -225,9 +225,6 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             className="ml-2 p-1.5 rounded-lg text-indigo-900 hover:bg-indigo-200/60 transition-colors shrink-0"
                             aria-label="대화방 목록 닫기"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
                         </button>
                     </div>
                     
@@ -286,7 +283,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
 
             <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#fdfdfd]">
                 <header className="flex items-center h-16 px-4 bg-white border-b-2 border-zinc-200 shrink-0 justify-between shadow-sm">
-                    <div className="flex items-center">
+                    <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={() => setIsRoomListOpen((open) => !open)}
