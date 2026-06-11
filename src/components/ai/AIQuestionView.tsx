@@ -133,7 +133,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
             const res = await fetch('/api/ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'generate', prompt, timeout: 30000, model: selectedModel }),
+                body: JSON.stringify({ action: 'generate', prompt, timeout: 60000, model: selectedModel }),
                 signal: abortControllerRef.current.signal
             });
             const data = await res.json();
@@ -305,7 +305,6 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             disabled={isLoading} 
                             className="bg-white border-2 border-zinc-300 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 font-extrabold flex-1 disabled:bg-zinc-200 disabled:text-zinc-500 transition-colors text-zinc-950 cursor-pointer"
                         >
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (고속)</option>
                             <option value="gemini-3.5-flash">Gemini 3.5 Flash (차세대)</option>
                             <option value="gemini-flash-latest">Gemini Flash Latest</option>
                         </select>
