@@ -158,7 +158,7 @@ export default function AdminView() {
                             type="text" 
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="사용자 이름 또는 학번으로 검색해 주세요"
+                            placeholder="사용자 이름 또는 학번으로 검색해 주세요."
                             className="w-full bg-zinc-100 pl-11 pr-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-base text-zinc-900"
                         />
                     </div>
