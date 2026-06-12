@@ -10,8 +10,7 @@ Document
 UML
 README.md
 
-# env-files
-.env
+# env-files / git
 .env.local
 .env.development
 .env.example
