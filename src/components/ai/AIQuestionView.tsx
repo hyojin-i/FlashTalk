@@ -19,18 +19,17 @@ function formatChatRoomListTitle(participants: ParticipantsDTO[]): string {
 interface Props {
     userId: string;
     chatRooms: ChatRoomListItemDTO[];
-    onClose: () => void;
-    onSendToRooms: (roomIdList: string[], messagePayload: any) => Promise<void>;
+    onSendToRooms: (roomIdList: string[], messagePayload: any) => Promise<void>
 }
 
 const MAX_AI_QUOTA = 10;
 const getTodayKey = (uid: string) => `ai_quota_${uid}_${new Date().toISOString().split('T')[0]}`;
 
-export default function AiQuestionView({ userId, chatRooms: initialChatRooms, onClose, onSendToRooms }: Props) {
+export default function AiQuestionView({ userId, chatRooms: initialChatRooms, onSendToRooms }: Props) {
     const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>(initialChatRooms);
 
     const [prompt, setPrompt] = useState('');
-    const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+    const [selectedModel, setSelectedModel] = useState('gemini-3.5-flash');
 
     const [submittedPrompt, setSubmittedPrompt] = useState('');
     const [submittedModel, setSubmittedModel] = useState('');
@@ -44,9 +43,7 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     
     const [usedQuota, setUsedQuota] = useState<number>(0);
     const abortControllerRef = useRef<AbortController | null>(null);
-    const onCloseRef = useRef(onClose);
     const closedByPopStateRef = useRef(false);
-    onCloseRef.current = onClose;
     
     useEffect(() => {
         if (typeof window !== 'undefined' && userId){
@@ -70,27 +67,6 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     useEffect(() => {
         return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
     }, []);
-
-    useEffect(() => {
-        window.history.pushState({ aiQuestionView: true }, '', window.location.href);
-
-        const handlePopState = () => {
-            closedByPopStateRef.current = true;
-            onCloseRef.current();
-        };
-
-        window.addEventListener('popstate', handlePopState);
-        return () => window.removeEventListener('popstate', handlePopState);
-    }, []);
-
-    const handleClose = () => {
-        if (closedByPopStateRef.current) {
-            closedByPopStateRef.current = false;
-            onClose();
-            return;
-        }
-        window.history.back();
-    };
 
     const checkAiConnection = async (model: string) => {
         setAiStatus('checking');
@@ -206,10 +182,10 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     }, [chatRooms, roomSearchKeyword]);
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-row bg-zinc-100 animate-slide-up overflow-hidden text-zinc-900">
+        <div className="fixed top-0 left-0 right-0 bottom-16 z-[100] flex bg-zinc-100 animate-slide-up overflow-hidden text-zinc-900">
             <aside
                 aria-hidden={!isRoomListOpen}
-                className={`h-full shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${
+                className={`h-full shrink-0 overflow-hidden transition-[width] duration-500 ease-in-out ${
                     isRoomListOpen ? 'w-80 border-r-2 border-zinc-300' : 'w-0 border-r-0'
                 }`}
             >
@@ -309,9 +285,6 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             <option value="gemini-flash-latest">Gemini Flash Latest</option>
                         </select>
                     </div>
-                    <button type="button" onClick={handleClose} className="flex items-center gap-1.5 px-4 py-2 bg-white text-zinc-800 hover:text-white hover:bg-zinc-900 border-2 border-zinc-300 rounded-xl text-[14px] font-black transition-colors shadow-sm ml-2">
-                        화면 닫기
-                    </button>
                 </header>
 
                 <div className="ai-content-layout flex-1 min-h-0 p-4 sm:p-6 max-w-4xl mx-auto w-full">
@@ -411,8 +384,8 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     transition: background-color 0.15s, border-color 0.15s;
                 }
                 .room-checkbox-selected {
-                    background: #4338ca;
-                    border-color: #4338ca;
+                    background: #4f46e5;
+                    border-color: #4f46e5;
                 }
                 .room-checkbox-icon {
                     width: 0.875rem;
@@ -422,22 +395,24 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                 .ai-share-btn {
                     width: 100%;
                     padding: 1rem 1.5rem;
-                    background: #4338ca;
+                    background: #4f46e5;
                     color: #ffffff;
-                    border: 2px solid #3730a3;
+                    border: 2px solid #4338ca;
                     border-radius: 0.75rem;
                     font-size: 15px;
                     font-weight: 900;
                     letter-spacing: 0.025em;
                     cursor: pointer;
-                    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+                    box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
                     transition: background-color 0.15s, opacity 0.15s;
                 }
                 .ai-share-btn:hover:not(:disabled) {
-                    background: #3730a3;
+                    background: #4338ca;
                 }
                 .ai-share-btn:disabled {
-                    opacity: 0.7;
+                    background: #94a3b8;
+                    border-color: #64748b;
+                    box-shadow: none;
                     cursor: not-allowed;
                 }
                 .ai-content-layout {
@@ -458,9 +433,9 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                 .ai-btn-reset {
                     flex: 0 0 auto;
                     padding: 1rem 1.5rem;
-                    background: #ffffff;
-                    color: #27272a;
-                    border: 2px solid #d4d4d8;
+                    background: #f1f5f9;
+                    color: #334155;
+                    border: 2px solid #cbd5e1;
                     border-radius: 1rem;
                     font-size: 15px;
                     font-weight: 900;
@@ -469,13 +444,13 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     cursor: pointer;
                 }
                 .ai-btn-reset:hover:not(:disabled) {
-                    background: #f4f4f5;
-                    border-color: #a1a1aa;
+                    background: #e2e8f0;
+                    border-color: #94a3b8;
                 }
                 .ai-btn-reset:disabled {
-                    background: #f4f4f5;
-                    color: #a1a1aa;
-                    border-color: #e4e4e7;
+                    background: #f8fafc;
+                    color: #94a3b8;
+                    border-color: #e2e8f0;
                     cursor: not-allowed;
                 }
                 .ai-btn-submit {
@@ -490,25 +465,26 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                     cursor: pointer;
                 }
                 .ai-btn-generate {
-                    background: #000000;
+                    background: #4f46e5;
                     color: #ffffff;
-                    border-color: #3730a3;
+                    border-color: #4338ca;
                 }
-                .ai-btn-generate:hover {
-                    background: #3730a3;
+                .ai-btn-generate:hover:not(:disabled) {
+                    background: #4338ca;
                 }
                 .ai-btn-generate:disabled {
-                    opacity: 0.7;
+                    background: #94a3b8;
+                    border-color: #64748b;
                     cursor: not-allowed;
                 }
                 .ai-btn-cancel {
-                    background: #dc2626;
+                    background: #e11d48;
                     color: #ffffff;
-                    border-color: #b91c1c;
+                    border-color: #be123c;
                     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
                 }
                 .ai-btn-cancel:hover {
-                    background: #b91c1c;
+                    background: #be123c;
                 }
                 .ai-response-panel {
                     min-height: 0;

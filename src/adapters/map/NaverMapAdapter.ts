@@ -44,9 +44,11 @@ export class NaverMapAdapter implements MapAdapter {
         
         const center = `${coordinates.longitude},${coordinates.latitude}`;
         const markerString = `type:d|size:mid|color:red|pos:${coordinates.longitude} ${coordinates.latitude}`;
-        const encodedMarkers = encodeURIComponent(markerString); 
+
+        const encodedMarkers = encodeURIComponent(markerString);
+        const encodedSecret = encodeURIComponent(this.ncpClientSecret);
         
-        return `https://maps.apigw.ntruss.com/map-static/v2/raster-cors?w=600&h=400&center=${center}&level=16&markers=${encodedMarkers}&X-NCP-APIGW-API-KEY-ID=${this.ncpClientId}`;
+        return `https://maps.apigw.ntruss.com/map-static/v2/raster?w=600&h=400&center=${center}&level=16&markers=${encodedMarkers}&X-NCP-APIGW-API-KEY-ID=${this.ncpClientId}&X-NCP-APIGW-API-KEY=${encodedSecret}`;
     }
 
     async reverseGeocode(coordinates: Coordinate): Promise<string> {

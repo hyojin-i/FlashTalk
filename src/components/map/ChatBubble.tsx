@@ -37,10 +37,6 @@ export default function ChatBubble({ message, isMe, senderName }: ChatBubbleProp
                         <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full">길찾기</span>
                     </div>
                 </a>
-
-                <span className="text-[10px] text-zinc-400 mb-1 whitespace-nowrap">
-            {new Date(message.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-        </span>
                 
                 <div className="p-3 bg-white">
                     <div className="flex justify-between items-start">
