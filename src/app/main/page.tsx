@@ -166,15 +166,70 @@ export default function MainView() {
   const [globalMapOpen, setGlobalMapOpen] = useState(false);
   const [globalAiOpen, setGlobalAiOpen] = useState(false);
 
+  useEffect(() => {
+      window.history.replaceState({ tab: "home" }, "", window.location.href);
+
+      const handlePopState = (e: PopStateEvent) => {
+          const state = e.state;
+          if (state?.tab === "map") {
+              setGlobalMapOpen(true);
+              setGlobalAiOpen(false);
+          } else if (state?.tab === "ai") {
+              setGlobalAiOpen(true);
+              setGlobalMapOpen(false);
+          } else {
+              setGlobalMapOpen(false);
+              setGlobalAiOpen(false);
+          }
+      };
+
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const globalMapOpenRef = useRef(globalMapOpen);
   const globalAiOpenRef = useRef(globalAiOpen);
   globalMapOpenRef.current = globalMapOpen;
   globalAiOpenRef.current = globalAiOpen;
 
-  const handleOpenMap = useCallback(() => {
-    window.history.pushState({ overlay: "map" }, "", window.location.href);
-    setGlobalMapOpen(true);
-  }, []);
+  useEffect(() => {
+      window.history.replaceState({ tab: "home" }, "", window.location.href);
+
+      const handlePopState = (e: PopStateEvent) => {
+          const state = e.state;
+          if (state?.tab === "map") {
+              setGlobalMapOpen(true);
+              setGlobalAiOpen(false);
+          } else if (state?.tab === "ai") {
+              setGlobalAiOpen(true);
+              setGlobalMapOpen(false);
+          } else {
+              setGlobalMapOpen(false);
+              setGlobalAiOpen(false);
+          }
+      };
+    })
+
+  const handleNavigate = useCallback((target: 'home' | 'map' | 'ai') => {
+      if (target === 'home') {
+          window.history.pushState({ tab: "home" }, "", window.location.href);
+          setGlobalMapOpen(false);
+          setGlobalAiOpen(false);
+      } else if (target === 'map') {
+          if (!globalMapOpen) {
+              window.history.pushState({ tab: "map" }, "", window.location.href);
+              setGlobalMapOpen(true);
+              setGlobalAiOpen(false);
+          }
+      } else if (target === 'ai') {
+          if (!globalAiOpen) {
+              window.history.pushState({ tab: "ai" }, "", window.location.href);
+              setGlobalAiOpen(true);
+              setGlobalMapOpen(false);
+          }
+      }
+  }, [globalMapOpen, globalAiOpen]);
+
   const handleCloseMap = useCallback(() => setGlobalMapOpen(false), []);
   const handleCloseAi = useCallback(() => setGlobalAiOpen(false), []);
 
@@ -678,81 +733,82 @@ export default function MainView() {
   return (
     <div className="flex min-h-screen bg-zinc-100 font-sans dark:bg-black">
       <aside
-        className={`flex min-h-screen shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200 ease-in-out dark:border-zinc-800 dark:bg-zinc-950 ${
-          sidebarOpen ? "w-72" : "w-0 overflow-hidden border-r-0"
+        className={`absolute sm:relative z-40 flex min-h-screen shrink-0 flex-col border-r border-zinc-200 bg-white transition-[transform,opacity,width] duration-500 ease-in-out dark:border-zinc-800 dark:bg-zinc-950 w-72 sm:w-80 shadow-2xl sm:shadow-none ${
+          sidebarOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none sm:-ml-80"
         }`}
         aria-hidden={!sidebarOpen}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            채팅방
-          </span>
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(false)}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            닫기
-          </button>
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 px-5 dark:border-zinc-800 bg-white">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-md">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+            </div>
+            <span className="text-[20px] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500">
+              플래시톡
+            </span>
+          </div>
+          <div className="relative group flex items-center">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className={`flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all duration-[500ms] ease-in-out active:scale-90 shadow-sm border border-indigo-100 overflow-hidden relative ${sidebarOpen ? 'rotate-0 opacity-100 scale-100' : 'rotate-[180deg] opacity-0 scale-50 pointer-events-none'}`}
+              aria-label="사이드바 닫기"
+            >
+              <svg className="absolute w-4 h-4 transition-transform duration-[1000ms] ease-in-out group-hover:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="absolute top-full mt-2 right-0 px-2.5 py-1.5 bg-zinc-800 text-white text-[11px] font-bold rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50">
+              사이드바 닫기
+            </div>
+          </div>
         </div>
-        <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+        
+        <div className="px-5 pt-5 pb-2">
+            <span className="text-[13px] font-extrabold text-zinc-500 tracking-wide">진행 중인 채팅방</span>
+        </div>
+
+        <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3 custom-scrollbar">
           {roomsLoading && chatRooms.length === 0 && (
-            <li className="px-3 py-6 text-center text-sm text-zinc-500">
-              불러오는 중…
-            </li>
+            <li className="px-3 py-10 text-center text-sm font-bold text-zinc-400">목록을 불러오는 중...</li>
           )}
           {roomsError && (
-            <li className="px-3 py-2 text-sm text-red-600 dark:text-red-400">
-              {roomsError}
-            </li>
+            <li className="px-3 py-4 text-center text-sm font-bold text-red-500 bg-red-50 rounded-xl">{roomsError}</li>
           )}
           {!roomsLoading && !roomsError && chatRooms.length === 0 && (
-            <li className="px-3 py-6 text-center text-sm text-zinc-500">
-              참여 중인 채팅방이 없습니다.
+            <li className="px-3 py-10 flex flex-col items-center justify-center gap-3 text-center">
+              <span className="text-4xl opacity-50">💬</span>
+              <span className="text-sm font-bold text-zinc-400">참여 중인 대화방이 없습니다.</span>
             </li>
           )}
           {chatRooms.map((room) => {
             const leaveUi = roomLeaveUi[room.roomId];
-            const listTitle = leaveUi?.partnerUnknown
-              ? "(알 수 없음)"
-              : formatChatRoomListTitle(room.participants);
+            const listTitle = leaveUi?.partnerUnknown ? "(알 수 없음)" : formatChatRoomListTitle(room.participants);
             const latest = latestMessages[room.roomId];
-            const previewText =
-              leaveUi?.sidebarPreview ?? latest?.content ?? "";
-            const previewIsPartnerLeft =
-              leaveUi?.partnerUnknown ?? latest?.isPartnerLeft ?? false;
+            const previewText = leaveUi?.sidebarPreview ?? latest?.content ?? "";
+            const previewIsPartnerLeft = leaveUi?.partnerUnknown ?? latest?.isPartnerLeft ?? false;
             const unread = unreadCounts[room.roomId] ?? 0;
+
             return (
               <li key={room.roomId}>
                 <button
                   type="button"
                   onClick={() => navigateToChatView(room.roomId)}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                  className="flex w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left transition-all hover:bg-zinc-100 hover:scale-[0.98] active:scale-95 dark:hover:bg-zinc-900 border border-transparent hover:border-zinc-200"
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800 dark:bg-violet-900 dark:text-violet-200">
+                  <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-indigo-100 to-violet-200 text-[15px] font-black text-indigo-700 shadow-sm border border-white dark:border-zinc-800">
                     {nameInitial(listTitle)}
+                    {unread > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white shadow-sm border-2 border-white">
+                            {unread > 99 ? "99+" : unread}
+                        </span>
+                    )}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                      {listTitle}
-                    </span>
-                    {previewText ? (
-                      <span
-                        className={`mt-0.5 block truncate text-xs ${
-                          previewIsPartnerLeft
-                            ? "text-red-500 dark:text-red-400"
-                            : "text-zinc-500 dark:text-zinc-400"
-                        }`}
-                      >
-                        {previewText}
-                      </span>
-                    ) : null}
+                  <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                    <span className="block truncate text-[14px] font-extrabold text-zinc-900 dark:text-zinc-50">{listTitle}</span>
+                    {previewText && (
+                      <span className={`block truncate text-[12px] font-medium ${previewIsPartnerLeft ? "text-red-500" : "text-zinc-500"}`}>{previewText}</span>
+                    )}
                   </span>
-                  {unread > 0 && (
-                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">
-                      {unread > 99 ? "99+" : unread}
-                    </span>
-                  )}
                 </button>
               </li>
             );
@@ -760,266 +816,295 @@ export default function MainView() {
         </ul>
       </aside>
 
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 sm:px-6 dark:border-zinc-800 dark:bg-zinc-950">
+      {sidebarOpen && (
+          <div 
+              className="fixed inset-0 bg-black/30 backdrop-blur-sm z-30 sm:hidden animate-fade-in" 
+              onClick={() => setSidebarOpen(false)}
+          />
+      )}
+
+      <div className="flex h-screen min-w-0 flex-1 flex-col relative bg-[#fdfdfd]">
+
+        <div className={`flex flex-col h-full overflow-hidden ${(!globalMapOpen && !globalAiOpen) ? 'block' : 'hidden'}`}>
+        
+        <header className="flex shrink-0 items-center justify-between bg-white h-16 sm:px-6 px-4 border-b border-zinc-200 shadow-sm z-10 w-full relative">
+          
           <div className="flex items-center gap-3">
-            {!sidebarOpen && (
+            <div className={`relative group flex items-center transition-all duration-[1000ms] ease-in-out ${sidebarOpen ? 'w-0 opacity-0 scale-50 -rotate-[180deg] pointer-events-none -ml-4' : 'w-10 opacity-100 scale-100 rotate-0'}`}>
               <button
-                type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 transition-all duration-[1000ms] active:scale-90 shadow-md shadow-indigo-200 overflow-hidden relative"
+                aria-label="사이드바 열기"
               >
-                열기
+                <svg className="absolute w-5 h-5 drop-shadow-sm transition-all duration-[1000ms] ease-in-out transform group-hover:scale-50 group-hover:opacity-0 group-hover:-translate-y-8" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                <svg className="absolute w-5 h-5 drop-shadow-sm transition-all duration-[1000ms] ease-in-out transform translate-y-8 scale-50 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               </button>
-            )}
-            <span className="text-xl font-bold tracking-tight text-black dark:text-zinc-50">
+              <div className="absolute top-full mt-2 left-0 px-2.5 py-1.5 bg-zinc-800 text-white text-[11px] font-bold rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50">
+                사이드바 메뉴 열기
+              </div>
+            </div>
+            <span className={`text-[22px] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500 transition-all duration-[1000ms] ease-in-out whitespace-nowrap overflow-hidden ${sidebarOpen ? 'w-0 opacity-0 scale-90 pointer-events-none ml-0' : 'w-auto opacity-100 scale-100'}`}>
               플래시톡
             </span>
-            <button
-            type="button"
-            onClick={handleOpenMap}
-            className="ml-4 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 flex items-center gap-1.5"
-        >
-            지도 검색 및 공유
-        </button>
-        <button
-            onClick={() => setGlobalAiOpen(true)}
-            className="ml-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 flex items-center gap-1.5 shadow-sm"
-        >
-            AI 프롬프트
-        </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setLogoutError(null);
-              setLogoutModalOpen(true);
-            }}
-            disabled={logoutPending}
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
-          >
-            로그아웃
-          </button>
+          <div className="flex items-center gap-4">
+            {currentUser && (
+              <div className="hidden sm:flex items-center gap-2 border-r border-zinc-200 pr-4 mr-1">
+                <span className="bg-zinc-100 text-zinc-600 text-[11px] font-black px-2 py-1 rounded-md tracking-wide">
+                  {currentUser.universityName}
+                </span>
+                <span className="text-sm font-extrabold text-zinc-800">
+                  {currentUser.name}
+                  <span className="text-xs text-zinc-400 font-mono ml-1 font-medium">({currentUser.studentId})</span>
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setLogoutError(null);
+                setLogoutModalOpen(true);
+              }}
+              disabled={logoutPending}
+              className="rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2 text-sm font-bold text-white transition-all hover:from-indigo-600 hover:to-violet-600 hover:shadow-md disabled:opacity-60 shrink-0"
+            >
+              로그아웃
+            </button>
+          </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            requestSearchUser();
-          }}
-          className="flex flex-col gap-3"
-        >
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              학교
-            </span>
-            <input
-              value={searchUniversityName}
-              onChange={(e) => setSearchUniversityName(e.target.value)}
-              autoComplete="organization"
-              placeholder="ex) 한국대"
-              className={inputClassName}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              학번
-            </span>
-            <input
-              value={searchStudentId}
-              onChange={(e) => setSearchStudentId(e.target.value)}
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="ex) 20260001"
-              className={inputClassName}
-            />
-          </label>
-          {searchError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {searchError}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={searchPending}
-            className="flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 overflow-y-auto custom-scrollbar pb-24">
+          
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              requestSearchUser();
+            }}
+            className="flex flex-col gap-4 bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
           >
-            {searchPending ? "검색 중…" : "검색"}
-          </button>
-        </form>
-
-        {showCreationBox && (
-          <section
-            className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800 dark:bg-zinc-950"
-            aria-label="채팅방 만들기"
-          >
-            <div className="min-w-0 flex-1 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
-                  {selectionCount}명 선택됨
-                </span>
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  {chatTypeLabel(selectionCount)}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {selectedUsers.map((user) => (
-                  <span
-                    key={user.userId}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 py-1.5 pl-3 pr-1.2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  >
-                    <span
-                      className={`h-2 w-2 shrink-0 rounded-full ${
-                        user.isOnline ? "bg-emerald-400" : "bg-zinc-400"
-                      }`}
-                      aria-hidden
+            <div className="flex flex-col sm:flex-row items-end gap-3 w-full">
+                <label className="flex-1 flex flex-col gap-1.5">
+                    <span className="text-[13px] font-bold text-zinc-700 dark:text-zinc-300 ml-1">
+                        학교명
+                    </span>
+                    <input
+                        value={searchUniversityName}
+                        onChange={(e) => setSearchUniversityName(e.target.value)}
+                        autoComplete="organization"
+                        placeholder="ex) 한국대"
+                        className={inputClassName}
                     />
-                    {user.name}
+                </label>
+                <label className="flex-1 flex flex-col gap-1.5">
+                    <span className="text-[13px] font-bold text-zinc-700 dark:text-zinc-300 ml-1">
+                        학번 또는 이름
+                    </span>
+                    <input
+                        value={searchStudentId}
+                        onChange={(e) => setSearchStudentId(e.target.value)}
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="ex) 20260001"
+                        className={inputClassName}
+                    />
+                </label>
+                <button
+                  type="submit"
+                  disabled={searchPending}
+                  className="h-11 px-7 w-full sm:w-auto rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-sm font-bold text-white transition-all active:scale-[0.99] hover:from-indigo-600 hover:to-violet-600 disabled:opacity-60 shadow-md shrink-0"
+                >
+                  {searchPending ? "사용자 검색 중..." : "사용자 검색"}
+                </button>
+            </div>
+            {searchError && (
+              <p className="text-sm text-red-600 font-medium ml-1 mt-1">
+                {searchError}
+              </p>
+            )}
+          </form>
+
+          {showCreationBox && (
+            <section
+              className="flex flex-col gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between dark:border-indigo-900 dark:bg-indigo-950/20 animate-fade-in"
+              aria-label="채팅방 만들기"
+            >
+              <div className="min-w-0 flex-1 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                    {selectionCount}명 선택됨
+                  </span>
+                  <span className="text-sm font-bold text-indigo-900 dark:text-indigo-300">
+                    {chatTypeLabel(selectionCount)} 시작하기
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedUsers.map((user) => (
+                    <span
+                      key={user.userId}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-indigo-200 py-1.5 pl-3 pr-1.5 text-xs font-bold text-indigo-900 shadow-sm dark:bg-zinc-900 dark:border-indigo-800 dark:text-indigo-200"
+                    >
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          user.isOnline ? "bg-emerald-500" : "bg-zinc-400"
+                        }`}
+                        aria-hidden
+                      />
+                      {user.name}
+                      <button
+                        type="button"
+                        onClick={() => deselectUser(user.userId)}
+                        className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition-colors"
+                      >
+                        <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" d="M3 3l6 6M9 3L3 9" /></svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                {createChatError && (
+                  <p className="text-sm text-red-600 font-bold">
+                    {createChatError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
+                <button
+                  type="button"
+                  onClick={clearAllSelectedUsers}
+                  disabled={selectionCount === 0}
+                  className="rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-bold text-indigo-600 transition-colors hover:bg-indigo-50 disabled:opacity-50 shadow-sm"
+                >
+                  선택 취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartChat}
+                  disabled={selectionCount === 0 || createChatPending}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition-all active:scale-[0.98] hover:bg-indigo-700 disabled:opacity-50 shadow-md shadow-indigo-200"
+                >
+                  <ChatBubbleIcon />
+                  {createChatPending ? "생성 중…" : "대화 시작하기"}
+                </button>
+              </div>
+            </section>
+          )}
+
+          <section className="flex flex-col bg-white rounded-2xl shadow-sm border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 overflow-hidden">
+            <div className="px-5 py-3 border-b border-zinc-100 bg-zinc-50 dark:bg-zinc-950 dark:border-zinc-800">
+                <span className="text-sm font-bold text-zinc-600 dark:text-zinc-400">검색된 사용자 목록</span>
+            </div>
+            <ul className="flex flex-col">
+              {searchPending && visibleUsers.length === 0 && (
+                <li className="px-4 py-10 text-center text-sm font-medium text-zinc-500">
+                  검색 중...
+                </li>
+              )}
+              {!searchPending && visibleUsers.length === 0 && (
+                <li className="px-4 py-10 text-center text-sm font-medium text-zinc-500">
+                  학교명과 학번 또는 이름으로 검색해 주세요
+                </li>
+              )}
+              {visibleUsers.map((user) => {
+                const isSelected = selectedUsers.some(
+                  (u) => u.userId === user.userId
+                );
+                const canSelect = user.isOnline || isSelected;
+                return (
+                  <li key={user.userId} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800">
                     <button
                       type="button"
-                      onClick={() => deselectUser(user.userId)}
-                      className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/20 hover:text-white dark:text-zinc-900/90 dark:hover:bg-zinc-900/10 dark:hover:text-zinc-900"
-                      aria-label={`${user.name} 선택 해제`}
-                    >
-                      <svg
-                        className="h-3 w-3"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          d="M3 3l6 6M9 3L3 9"
-                        />
-                      </svg>
-                    </button>
-                  </span>
-                ))}
-              </div>
-              {createChatError && (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {createChatError}
-                </p>
-              )}
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
-              <button
-                type="button"
-                onClick={clearAllSelectedUsers}
-                disabled={selectionCount === 0}
-                className="rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
-              >
-                선택 취소
-              </button>
-              <button
-                type="button"
-                onClick={handleStartChat}
-                disabled={selectionCount === 0 || createChatPending}
-                className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                <ChatBubbleIcon />
-                {createChatPending ? "생성 중…" : "대화시작"}
-              </button>
-            </div>
-          </section>
-        )}
-
-        <section className="flex min-h-0 flex-1 flex-col">
-          <ul className="flex flex-col gap-2 overflow-y-auto">
-            {searchPending && visibleUsers.length === 0 && (
-              <li className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-zinc-500 dark:bg-zinc-950">
-                검색 중…
-              </li>
-            )}
-            {!searchPending && visibleUsers.length === 0 && (
-              <li className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-zinc-500 dark:bg-zinc-950">
-                학번과 학교명으로 검색해 주세요.
-              </li>
-            )}
-            {visibleUsers.map((user) => {
-              const isSelected = selectedUsers.some(
-                (u) => u.userId === user.userId
-              );
-              const canSelect = user.isOnline || isSelected;
-              return (
-                <li key={user.userId}>
-                  <button
-                    type="button"
-                    onClick={() => toggleUserSelection(user)}
-                    disabled={!canSelect}
-                    aria-disabled={!canSelect}
-                    className={`flex w-full items-center gap-3 rounded-2xl border-2 bg-white px-4 py-3 text-left transition-colors dark:bg-zinc-950 ${
-                      isSelected
-                        ? "border-sky-400 bg-sky-50/80 dark:border-sky-500 dark:bg-sky-950/30"
-                        : "border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
-                    } ${!canSelect ? "cursor-not-allowed opacity-60" : ""}`}
-                  >
-                    <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
+                      onClick={() => toggleUserSelection(user)}
+                      disabled={!canSelect}
+                      className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-colors ${
                         isSelected
-                          ? "border-zinc-900 bg-zinc-900 dark:border-zinc-100 dark:bg-zinc-100"
-                          : "border-zinc-300 bg-white dark:border-zinc-600"
-                      }`}
-                      aria-hidden
+                          ? "bg-indigo-50/50 dark:bg-indigo-900/20"
+                          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      } ${!canSelect ? "cursor-not-allowed opacity-50 grayscale" : ""}`}
                     >
-                      {isSelected && (
-                        <svg
-                          className="h-3 w-3 text-white dark:text-zinc-900"
-                          viewBox="0 0 12 12"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            d="M2 6l3 3 5-5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
-                    </span>
-
-                    <span className="relative shrink-0">
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-200 text-base font-semibold text-violet-800 dark:bg-violet-900 dark:text-violet-200">
-                        {nameInitial(user.name)}
-                      </span>
-                      {user.isOnline && (
-                        <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-zinc-950" />
-                      )}
-                    </span>
-
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-zinc-900 dark:text-zinc-50">
-                          {user.name}
-                        </span>
-                        {user.isOnline && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            온라인
-                          </span>
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${isSelected ? "border-indigo-600 bg-indigo-600" : "border-zinc-300 bg-white"}`}>
+                        {isSelected && (
+                          <svg className="h-4 w-4 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                            <path d="M2 6l3 3 5-5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
                         )}
                       </span>
-                      <span className="mt-0.5 block text-sm text-zinc-500 dark:text-zinc-400">
-                        {user.studentId} | {user.universityName} | {user.isOnline ? "온라인" : "오프라인"}
+
+                      <span className="relative shrink-0">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 text-lg font-black text-violet-700 border-2 border-white shadow-sm">
+                          {nameInitial(user.name)}
+                        </span>
+                        {user.isOnline && (
+                          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[2.5px] border-white bg-emerald-500 shadow-sm" />
+                        )}
                       </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2 mb-0.5">
+                          <span className="text-base font-extrabold text-zinc-900 dark:text-zinc-50">
+                            {user.name}
+                          </span>
+                          {user.isOnline && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-600 tracking-wide border border-emerald-100">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              ONLINE
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                          {user.universityName} <span className="mx-1 text-zinc-300">|</span> {user.studentId}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         </main>
+      </div>
+
+      <div className={globalMapOpen ? 'block' : 'hidden'}>
+            <MapSearchView userId={currentUser?.userId ?? ''} chatRooms={chatRooms} onSendToRooms={handleSendMapToMultipleRooms} />
+        </div>
+
+        <div className={globalAiOpen ? 'block' : 'hidden'}>
+            <AiQuestionView userId={currentUser?.userId ?? ''} chatRooms={chatRooms} onSendToRooms={handleSendAiToMultipleRooms} />
+        </div>
+
+        <nav className="fixed bottom-0 left-0 right-0 z-[120] flex items-center justify-around bg-white border-t border-zinc-200 h-16 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] pb-safe">
+            <button 
+                onClick={() => handleNavigate('home')} 
+                className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-colors h-full ${!globalMapOpen && !globalAiOpen ? 'text-indigo-600' : 'text-zinc-400 hover:text-zinc-600'}`}
+            >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={!globalMapOpen && !globalAiOpen ? 2.5 : 2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                <span className="text-[10px] font-extrabold tracking-wide">메인 홈</span>
+            </button>
+            <button 
+                onClick={() => handleNavigate('map')} 
+                className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-colors h-full ${globalMapOpen ? 'text-sky-500' : 'text-zinc-400 hover:text-sky-400'}`}
+            >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={globalMapOpen ? 2.5 : 2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                <span className="text-[10px] font-extrabold tracking-wide">지도 검색</span>
+            </button>
+            <button 
+                onClick={() => handleNavigate('ai')} 
+                className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-colors h-full ${globalAiOpen ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-400'}`}
+            >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={globalAiOpen ? 2.5 : 2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="text-[10px] font-extrabold tracking-wide">AI 어시스턴트</span>
+            </button>
+        </nav>
       </div>
 
       {inviteToast && (
         <div
-          className="fixed bottom-6 right-6 z-50 w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+          className="fixed bottom-24 right-4 sm:right-6 z-[130] w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-950 animate-slide-up"
           role="status"
           aria-live="polite"
         >
@@ -1095,23 +1180,6 @@ export default function MainView() {
             </div>
           </div>
         </div>
-      )}
-      {globalMapOpen && (
-          <MapSearchView
-              userId={currentUser?.userId ?? ''}
-              chatRooms={chatRooms} 
-              onClose={handleCloseMap}
-              onSendToRooms={handleSendMapToMultipleRooms}
-          />
-      )}
-
-      {globalAiOpen && (
-          <AiQuestionView
-              userId={currentUser?.userId ?? ''}
-              chatRooms={chatRooms} 
-              onClose={handleCloseAi}
-              onSendToRooms={handleSendAiToMultipleRooms}
-          />
       )}
     </div>
   );

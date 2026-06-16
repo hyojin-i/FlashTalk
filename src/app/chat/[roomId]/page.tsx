@@ -914,46 +914,35 @@ export default function ChatView({
         }`}
       >
         {/* Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-100 bg-white px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-6 w-full shadow-sm z-10">
           <div className="flex min-w-0 flex-col">
-            <span className="truncate text-lg font-bold text-black">
+            <span className="truncate text-[17px] font-black text-zinc-950 tracking-tight">
               {participantsLoading ? "불러오는 중…" : headerTitle}
             </span>
             {participantsError ? (
-              <span className="text-xs text-red-500">{participantsError}</span>
+              <span className="text-xs font-bold text-red-500">{participantsError}</span>
             ) : headerSubtitle ? (
-              <span className="text-xs text-zinc-500">{headerSubtitle}</span>
+              <span className="text-[12px] font-bold text-zinc-500">{headerSubtitle}</span>
             ) : null}
           </div>
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="text-zinc-600 hover:text-black"
+            className="text-zinc-500 hover:text-zinc-950 transition-colors p-2 bg-zinc-50 hover:bg-zinc-100 rounded-lg"
             aria-label="대화방 설정 열기"
           >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
         </header>
 
         {/* Body */}
-        <main className="flex flex-1 flex-col gap-4 overflow-y-auto bg-[#f8f9fa] p-4">
-          <div className="my-4 flex justify-center">
-            <span className="rounded-full bg-white px-4 py-1.5 text-xs text-zinc-500 shadow-sm">
-              {formatTodayDateLabel()}
-            </span>
-          </div>
+        <main className="flex flex-1 flex-col overflow-y-auto bg-[#f0f2f5]">
+          <div className="mx-auto w-full max-w-3xl flex flex-col gap-4 p-4 sm:p-6 min-h-full">
+            <div className="my-4 flex justify-center w-full">
+              <span className="rounded-full bg-black/10 backdrop-blur-sm px-4 py-1.5 text-[11px] font-bold text-zinc-600 shadow-sm">
+                {formatTodayDateLabel()}
+              </span>
+            </div>
 
           {transientMessageList.map((msg) => {
             const isMine =
@@ -1120,196 +1109,135 @@ export default function ChatView({
             );
           })}
           {chatDisabled && (
-            <div className="sticky bottom-0 flex justify-center py-2">
-              <span className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-center text-xs text-red-600">
-                대화 상대가 채팅방을 나갔습니다. 대화를 이어갈 수 없습니다.
-              </span>
-            </div>
-          )}
-          <div ref={messagesEndRef} className="h-0 shrink-0" aria-hidden />
+              <div className="sticky bottom-0 flex justify-center py-2 w-full mt-4">
+                <span className="rounded-full border border-red-200 bg-red-50 px-5 py-2 text-center text-xs font-bold text-red-600 shadow-sm">
+                  대화 상대가 채팅방을 나갔습니다. 대화를 이어갈 수 없습니다.
+                </span>
+              </div>
+            )}
+            <div ref={messagesEndRef} className="h-0 shrink-0 w-full" aria-hidden />
+          </div>
         </main>
 
         {/* Footer */}
-        <footer className="flex shrink-0 flex-col gap-1 bg-white p-4">
-          {attachError && (
-            <p className="text-center text-xs text-red-500">{attachError}</p>
-          )}
-          {sendError && (
-            <p className="text-center text-xs text-red-500">{sendError}</p>
-          )}
-          {attachedFile && (
-            <div className="flex items-center justify-between rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-700">
-              <span className="truncate">
-                {attachedFile.name} ({formatFileSize(attachedFile.size)})
-              </span>
+        <footer className="flex shrink-0 flex-col bg-white border-t border-zinc-200">
+          <div className="mx-auto w-full max-w-3xl flex flex-col gap-1 p-3 sm:p-4">
+            {attachError && (
+              <p className="text-center text-xs font-bold text-red-500 mb-2">{attachError}</p>
+            )}
+            {sendError && (
+              <p className="text-center text-xs font-bold text-red-500 mb-2">{sendError}</p>
+            )}
+            {attachedFile && (
+              <div className="flex items-center justify-between rounded-xl bg-zinc-100 px-4 py-3 text-sm font-bold text-zinc-700 mb-2 shadow-inner border border-zinc-200">
+                <span className="truncate">
+                  {attachedFile.name} <span className="text-zinc-400 font-mono text-xs ml-1">({formatFileSize(attachedFile.size)})</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => {
+                    setAttachedFile(null);
+                    setAttachError(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="ml-3 shrink-0 text-zinc-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
+            <form className="flex items-center gap-2 sm:gap-3 w-full" onSubmit={handleSubmit}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                disabled={isLoading || chatDisabled}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) attachFile(file);
+                }}
+              />
               <button
                 type="button"
-                disabled={isLoading}
-                onClick={() => {
-                  setAttachedFile(null);
-                  setAttachError(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="ml-2 shrink-0 text-zinc-500 hover:text-black disabled:opacity-50"
-              >
-                제거
-              </button>
-            </div>
-          )}
-          <form
-            className="flex items-center gap-3"
-            onSubmit={handleSubmit}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              disabled={isLoading || chatDisabled}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) attachFile(file);
-              }}
-            />
-            <button
-              type="button"
-              className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-500 hover:text-black disabled:opacity-50"
-              disabled={isLoading || chatDisabled}
-              aria-label="파일 첨부"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <svg
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-            </button>
-            <div
-              className="flex flex-1 items-center rounded-xl bg-zinc-100 px-4 py-2.5"
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const file = e.dataTransfer.files?.[0];
-                if (file) attachFile(file);
-              }}
-            >
-              <input
-                type="text"
-                value={currentMessage}
-                onChange={(e) => setCurrentMessage(e.target.value)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-zinc-400 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 rounded-xl transition-colors"
                 disabled={isLoading || chatDisabled}
-                placeholder={
-                  chatDisabled
-                    ? "대화 상대가 나가 대화를 이어갈 수 없습니다"
-                    : "메시지를 입력하세요"
-                }
-                className="w-full bg-transparent text-sm text-black outline-none placeholder:text-zinc-500 disabled:opacity-60"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={
-                chatDisabled ||
-                isLoading ||
-                (!currentMessage.trim() && !attachedFile)
-              }
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white hover:bg-zinc-800 disabled:opacity-50"
-            >
-              <svg
-                className="h-4 w-4 translate-x-[-1px] translate-y-[1px]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+                aria-label="파일 첨부"
+                onClick={() => fileInputRef.current?.click()}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <div
+                className="flex flex-1 items-center rounded-2xl bg-zinc-100 px-4 py-3 border border-transparent focus-within:border-indigo-300 focus-within:bg-white transition-all shadow-inner"
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) attachFile(file);
+                }}
+              >
+                <input
+                  type="text"
+                  value={currentMessage}
+                  onChange={(e) => setCurrentMessage(e.target.value)}
+                  disabled={isLoading || chatDisabled}
+                  placeholder={chatDisabled ? "대화 상대가 나가 대화를 이어갈 수 없습니다" : "메시지를 입력하세요"}
+                  className="w-full bg-transparent text-[15px] font-medium text-zinc-950 outline-none placeholder:text-zinc-400 placeholder:font-semibold disabled:opacity-60"
                 />
-              </svg>
-            </button>
-          </form>
+              </div>
+              <button
+                type="submit"
+                disabled={chatDisabled || isLoading || (!currentMessage.trim() && !attachedFile)}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-zinc-300 disabled:text-zinc-100 transition-colors shadow-sm"
+              >
+                <svg className="h-5 w-5 translate-x-[-1px] translate-y-[1px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </form>
+          </div>
         </footer>
       </div>
 
       {/* Chat room settings panel */}
       <aside
-        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-white shadow-2xl transition-transform duration-200 ease-out ${
+        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-white shadow-2xl transition-transform duration-500 ease-in-out ${
           settingsOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-hidden={!settingsOpen}
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-100 px-5">
-          <h2 className="text-lg font-bold text-zinc-900">대화방 설정</h2>
+          <h2 className="text-[17px] font-black text-zinc-950">대화방 설정</h2>
           <button
             type="button"
             onClick={() => setSettingsOpen(false)}
             className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
             aria-label="닫기"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
-          <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-zinc-800">
-            <svg
-              className="h-5 w-5 text-zinc-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <span>현재 대화 참여자 ({totalParticipantCount}명)</span>
+          <div className="mb-4 flex items-center gap-2 text-[14px] font-extrabold text-zinc-800">
+            <svg className="h-5 w-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+            <span>대화 참여자 ({totalParticipantCount}명)</span>
           </div>
 
           <ul className="flex flex-col gap-3">
             <li className="flex items-center gap-3">
               <span className="relative shrink-0">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-indigo-500 text-[15px] font-black text-white shadow-sm">
                   {currentUser ? nameInitial(currentUser.name) : "나"}
                 </span>
-                <span
-                  className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500"
-                  aria-hidden
-                />
+                <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-[2.5px] border-white bg-emerald-500 shadow-sm" aria-hidden />
               </span>
               <span className="min-w-0 flex-1 text-sm text-zinc-800">
-                <span className="font-medium text-zinc-900">나</span>
-                <span className="mt-0.5 block text-xs text-emerald-600">
-                  온라인
-                </span>
+                <span className="font-extrabold text-zinc-950 text-[15px]">나</span>
+                <span className="mt-0.5 block text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md w-fit border border-emerald-100">ONLINE</span>
               </span>
             </li>
             {otherParticipants.map((p) => {
@@ -1317,104 +1245,74 @@ export default function ChatView({
               return (
                 <li key={p.userId} className="flex items-center gap-3">
                   <span className="relative shrink-0">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-zinc-100 text-[15px] font-black text-zinc-700 border border-zinc-200">
                       {nameInitial(p.name)}
                     </span>
-                    <span
-                      className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
-                        online ? "bg-emerald-500" : "bg-zinc-400"
-                      }`}
-                      aria-hidden
-                    />
+                    <span className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-[2.5px] border-white shadow-sm ${online ? "bg-emerald-500" : "bg-zinc-400"}`} aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1 text-sm text-zinc-800">
-                    <span className="font-medium text-zinc-900">{p.name}</span>
-                    <span className="mt-0.5 block text-xs text-zinc-500">
-                      {p.studentId} · {online ? "온라인" : "오프라인"}
+                    <span className="font-extrabold text-zinc-950 text-[15px]">{p.name}</span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-bold">
+                      <span className="text-zinc-400">{p.studentId}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md border ${online ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-zinc-50 text-zinc-400 border-zinc-200'}`}>
+                        {online ? "ONLINE" : "OFFLINE"}
+                      </span>
                     </span>
                   </span>
                 </li>
               );
             })}
             {participantsLoading && otherParticipants.length === 0 && (
-              <li className="text-sm text-zinc-500">불러오는 중…</li>
+              <li className="text-sm font-bold text-zinc-400 py-2">참여자를 불러오는 중…</li>
             )}
           </ul>
 
-          <div className="my-6 border-t border-zinc-100" />
+          <div className="my-6 border-t-2 border-zinc-100" />
 
           <button
             type="button"
             onClick={openInviteModal}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-indigo-100 bg-indigo-50 px-4 py-3.5 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100 hover:border-indigo-200 active:scale-[0.98]"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-              />
-            </svg>
-            친구 초대
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+            대화방 친구 초대하기
           </button>
 
           <button
             type="button"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-red-50 border border-red-100 px-4 py-3.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100 hover:border-red-200 active:scale-[0.98]"
             onClick={() => {
               setLeaveError(null);
               setLeaveModalOpen(true);
             }}
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
-            대화방 나가기
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            이 대화방 나가기
           </button>
         </div>
       </aside>
 
       {inviteSuccessToast && (
         <div
-          className="fixed bottom-6 right-6 z-[70] rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 shadow-lg"
+          className="fixed bottom-6 right-6 z-[70] rounded-xl border-2 border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-black text-emerald-700 shadow-xl animate-slide-up"
           role="status"
           aria-live="polite"
         >
-          초대가 완료되었습니다.
+          ✅ 초대가 성공적으로 완료되었습니다!
         </div>
       )}
 
       {inviteModalOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="invite-dialog-title"
         >
-          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4">
-              <h2
-                id="invite-dialog-title"
-                className="text-lg font-bold text-zinc-900"
-              >
-                친구 초대
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-2xl animate-slide-up">
+            <div className="flex shrink-0 items-center justify-between border-b-2 border-zinc-100 bg-zinc-50 px-6 py-5">
+              <h2 id="invite-dialog-title" className="text-[17px] font-black text-zinc-950 tracking-tight">
+                대화방에 친구 초대
               </h2>
               <button
                 type="button"
@@ -1422,116 +1320,89 @@ export default function ChatView({
                   if (!invitePending) setInviteModalOpen(false);
                 }}
                 disabled={invitePending}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 disabled:opacity-60"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-600 hover:bg-zinc-300 disabled:opacity-60 transition-colors"
                 aria-label="닫기"
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   requestInviteSearch();
                 }}
-                className="flex flex-col gap-3"
+                className="flex flex-col sm:flex-row items-end gap-3 w-full"
               >
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-zinc-700">
-                    학교
-                  </span>
+                <label className="flex-1 flex flex-col gap-1.5 w-full">
+                  <span className="text-[15px] font-extrabold text-zinc-700 ml-1">학교명</span>
                   <input
                     value={inviteSearchUniversityName}
-                    onChange={(e) =>
-                      setInviteSearchUniversityName(e.target.value)
-                    }
+                    onChange={(e) => setInviteSearchUniversityName(e.target.value)}
                     autoComplete="organization"
                     placeholder="ex) 한국대"
                     className={inviteInputClassName}
                   />
                 </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-zinc-700">
-                    학번
-                  </span>
+                <label className="flex-1 flex flex-col gap-1.5 w-full">
+                  <span className="text-[15px] font-extrabold text-zinc-700 ml-1">학번 또는 이름</span>
                   <input
                     value={inviteSearchStudentId}
                     onChange={(e) => setInviteSearchStudentId(e.target.value)}
                     inputMode="numeric"
                     autoComplete="off"
                     placeholder="ex) 20260001"
-                    className={inviteInputClassName}
+                    className="w-full bg-zinc-50 border-2 border-zinc-200 px-4 py-3 rounded-xl text-sm font-bold text-zinc-900 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder:font-medium placeholder:text-zinc-400"
                   />
                 </label>
-                {inviteSearchError && (
-                  <p className="text-sm text-red-600">{inviteSearchError}</p>
-                )}
                 <button
                   type="submit"
                   disabled={inviteSearchPending}
-                  className="flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+                  className="h-11 px-7 w-full sm:w-auto rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-[10px] font-black text-white hover:from-indigo-600 hover:to-violet-600 disabled:opacity-60 transition-colors active:scale-[0.98] shadow-md shrink-0 mb-[2px]"
                 >
-                  {inviteSearchPending ? "검색 중…" : "검색"}
+                  {inviteSearchPending ? "검색 중…" : "사용자 검색"}
                 </button>
               </form>
 
               {inviteSelectedUsers.length > 0 && (
-                <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-3">
-                  <span className="text-sm font-medium text-zinc-700">
+                <section className="flex flex-col gap-3 rounded-2xl border-2 border-indigo-100 bg-indigo-50/50 p-4">
+                  <span className="text-[13px] font-black text-indigo-900">
                     {inviteSelectedUsers.length}명 선택됨
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {inviteSelectedUsers.map((user) => (
-                      <span
-                        key={user.userId}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white"
-                      >
+                      <span key={user.userId} className="inline-flex items-center gap-1.5 rounded-full bg-indigo-600 pl-3 pr-1.5 py-1.5 text-xs font-bold text-white shadow-sm">
                         {user.name}
+                        <button type="button" onClick={() => toggleInviteUserSelection(user)} className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-700 hover:bg-indigo-800 text-indigo-200 hover:text-white transition-colors">
+                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" d="M3 3l6 6M9 3L3 9" /></svg>
+                        </button>
                       </span>
                     ))}
                   </div>
                   {inviteError && (
-                    <p className="text-sm text-red-600">{inviteError}</p>
+                    <p className="text-sm font-bold text-red-600">{inviteError}</p>
                   )}
                   <button
                     type="button"
                     onClick={() => void requestInviteFriends()}
                     disabled={invitePending}
-                    className="flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+                    className="mt-2 flex h-12 w-full items-center justify-center rounded-xl bg-indigo-600 text-[15px] font-black text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors active:scale-[0.98] shadow-md shadow-indigo-200"
                   >
-                    {invitePending ? "초대 중…" : "초대하기"}
+                    {invitePending ? "초대 중…" : "선택한 친구 초대하기"}
                   </button>
                 </section>
               )}
 
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col gap-2 border-t-2 border-zinc-100 pt-4">
                 {inviteSearchPending && inviteVisibleUsers.length === 0 && (
-                  <li className="rounded-xl px-4 py-6 text-center text-sm text-zinc-500">
-                    검색 중…
-                  </li>
+                  <li className="rounded-2xl px-4 py-8 text-center text-sm font-bold text-zinc-400 bg-zinc-50 border border-zinc-100">검색 중…</li>
                 )}
                 {!inviteSearchPending && inviteVisibleUsers.length === 0 && (
-                  <li className="rounded-xl px-4 py-6 text-center text-sm text-zinc-500">
-                    학번과 학교명으로 검색해 주세요.
-                  </li>
+                  <li className="rounded-2xl px-4 py-8 text-center text-sm font-bold text-zinc-400 bg-zinc-50 border border-zinc-100">검색된 사용자가 없습니다.</li>
                 )}
                 {inviteVisibleUsers.map((user) => {
-                  const isSelected = inviteSelectedUserIds.includes(
-                    user.userId
-                  );
+                  const isSelected = inviteSelectedUserIds.includes(user.userId);
                   const canSelect = user.isOnline || isSelected;
                   return (
                     <li key={user.userId}>
@@ -1539,51 +1410,22 @@ export default function ChatView({
                         type="button"
                         onClick={() => toggleInviteUserSelection(user)}
                         disabled={!canSelect}
-                        className={`flex w-full items-center gap-3 rounded-xl border-2 bg-white px-4 py-3 text-left transition-colors ${
-                          isSelected
-                            ? "border-sky-400 bg-sky-50/80"
-                            : "border-transparent hover:border-zinc-200"
-                        } ${!canSelect ? "cursor-not-allowed opacity-60" : ""}`}
+                        className={`flex w-full items-center gap-3.5 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${
+                          isSelected ? "border-indigo-500 bg-indigo-50" : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50"
+                        } ${!canSelect ? "cursor-not-allowed opacity-50 grayscale" : "active:scale-[0.98]"}`}
                       >
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
-                            isSelected
-                              ? "border-zinc-900 bg-zinc-900"
-                              : "border-zinc-300 bg-white"
-                          }`}
-                          aria-hidden
-                        >
-                          {isSelected && (
-                            <svg
-                              className="h-3 w-3 text-white"
-                              viewBox="0 0 12 12"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={2}
-                            >
-                              <path
-                                d="M2 6l3 3 5-5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          )}
+                        <span className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border-[2.5px] transition-colors ${isSelected ? "border-indigo-600 bg-indigo-600" : "border-zinc-300 bg-white"}`}>
+                          {isSelected && <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={3}><path d="M2 6l3 3 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                         </span>
                         <span className="relative shrink-0">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-200 text-sm font-semibold text-violet-800">
+                          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100 text-[15px] font-black text-violet-700 border border-violet-200">
                             {nameInitial(user.name)}
                           </span>
-                          {user.isOnline && (
-                            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
-                          )}
+                          {user.isOnline && <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-[2.5px] border-white bg-emerald-500 shadow-sm" />}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block font-semibold text-zinc-900">
-                            {user.name}
-                          </span>
-                          <span className="mt-0.5 block text-sm text-zinc-500">
-                            {user.studentId} | {user.universityName}
-                          </span>
+                          <span className="block font-black text-[15px] text-zinc-900">{user.name}</span>
+                          <span className="mt-0.5 block text-xs font-bold text-zinc-500">{user.studentId} <span className="text-zinc-300 px-0.5">|</span> {user.universityName}</span>
                         </span>
                       </button>
                     </li>
@@ -1597,7 +1439,7 @@ export default function ChatView({
 
       {leaveModalOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="leave-dialog-title"
@@ -1638,6 +1480,16 @@ export default function ChatView({
           </div>
         </div>
       )}
+
+        <style jsx>{`
+            .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #d4d4d8; border-radius: 10px; }
+            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+            .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+            .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+            @keyframes slideUp { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        `}</style>
     </div>
   );
 }
