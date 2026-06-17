@@ -585,50 +585,39 @@ export default function MainView() {
 
     const token = readStoredToken();
 
+    // 서버 로그아웃은 best-effort: 토큰이 없거나 만료되어 401이 떠도
+    // 사용자는 사실상 로그아웃 상태이므로 로컬 정리 후 로그인 페이지로 이동한다.
     try {
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
 
-      const res = await fetch("/api/users/logout", {
+      await fetch("/api/users/logout", {
         method: "POST",
         headers,
       });
-
-      let data: { ok?: boolean; error?: string } = {};
-      try {
-        data = (await res.json()) as { ok?: boolean; error?: string };
-      } catch {
-        /* ignore */
-      }
-
-      if (!res.ok || !data.ok) {
-        setLogoutError(
-          typeof data.error === "string"
-            ? data.error
-            : "로그아웃에 실패했습니다. 잠시 후 다시 시도해 주세요."
-        );
-        return;
-      }
-
-      await disconnectAllSockets();
-      resetBrowserRealtimeAuth();
-      channelRef.current = null;
-
-      try {
-        sessionStorage.clear();
-      } catch {
-        /* ignore */
-      }
-
-      setInviteToast(null);
-      setChatRooms([]);
-      setLogoutModalOpen(false);
-      router.push("/login");
     } catch {
-      setLogoutError("네트워크 오류가 발생했습니다.");
-    } finally {
-      setLogoutPending(false);
+      /* 네트워크 오류가 나도 로컬 세션은 정리하고 로그인 페이지로 보낸다 */
     }
+
+    try {
+      await disconnectAllSockets();
+    } catch {
+      /* ignore */
+    }
+    resetBrowserRealtimeAuth();
+    channelRef.current = null;
+
+    try {
+      sessionStorage.clear();
+    } catch {
+      /* ignore */
+    }
+
+    setInviteToast(null);
+    setChatRooms([]);
+    setLogoutModalOpen(false);
+    setLogoutPending(false);
+    router.replace("/login");
   }
 
   const selectionCount = selectedUsers.length;
