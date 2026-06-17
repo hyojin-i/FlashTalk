@@ -599,25 +599,31 @@ export default function MainView() {
       /* 네트워크 오류가 나도 로컬 세션은 정리하고 로그인 페이지로 보낸다 */
     }
 
-    try {
-      await disconnectAllSockets();
-    } catch {
-      /* ignore */
-    }
-    resetBrowserRealtimeAuth();
-    channelRef.current = null;
-
+    // 로컬 세션을 먼저 비워 어떤 경우에도 인증 상태가 남지 않도록 한다.
     try {
       sessionStorage.clear();
     } catch {
       /* ignore */
     }
-
+    resetBrowserRealtimeAuth();
+    channelRef.current = null;
     setInviteToast(null);
     setChatRooms([]);
     setLogoutModalOpen(false);
-    setLogoutPending(false);
-    router.replace("/login");
+
+    // 소켓 정리는 best-effort로 시도하되, 행(hang)이 걸려도 리다이렉트를
+    // 막지 않도록 타임아웃을 둔다. (removeAllChannels 가 멈추는 경우 대비)
+    try {
+      await Promise.race([
+        disconnectAllSockets(),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    } catch {
+      /* ignore */
+    }
+
+    // 전체 페이지를 새로 로드해 메모리에 남은 소켓/상태까지 확실히 정리한다.
+    window.location.replace("/login");
   }
 
   const selectionCount = selectedUsers.length;
