@@ -153,7 +153,7 @@ export default function MainView() {
   const [createChatPending, setCreateChatPending] = useState(false);
   const [createChatError, setCreateChatError] = useState<string | null>(null);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [roomsError, setRoomsError] = useState<string | null>(null);
