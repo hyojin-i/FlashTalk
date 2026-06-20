@@ -1006,7 +1006,7 @@ export default function ChatView({
               return (
                 <div
                   key={msg.id}
-                  className="mt-2 flex flex-col items-start gap-1"
+                  className="mt-2 mb-3 flex flex-col items-start gap-1"
                 >
                   <span className="ml-1 text-xs font-medium text-zinc-600">
                     {senderName}
@@ -1028,7 +1028,7 @@ export default function ChatView({
                 const mapMessageObj = payloadToMessage(msg) as any; 
                 
                 return (
-                  <div key={msg.id} className="w-full flex flex-col mt-2">
+                  <div key={msg.id} className="w-full flex flex-col mt-2 mb-3">
                     {!isMine && <span className="ml-1 mb-1 text-xs font-medium text-zinc-600">{senderName}</span>}
                     
                     <div className={`flex w-full items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
@@ -1057,7 +1057,7 @@ export default function ChatView({
                 };
 
                 return (
-                  <div key={msg.id} className="w-full flex flex-col mt-3 mb-1">
+                  <div key={msg.id} className="w-full flex flex-col mt-3 mb-3">
                     {!isMine && <span className="ml-1 mb-1 text-xs font-bold text-zinc-600">{senderName}</span>}
                     
                     <div className={`flex w-full items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
@@ -1079,7 +1079,7 @@ export default function ChatView({
 
             if (isMine) {
               return (
-                <div key={msg.id} className="flex flex-col items-end gap-1">
+                <div key={msg.id} className="flex flex-col items-end gap-1 mb-2">
                   <div
                     className="rounded-2xl rounded-tr-none px-4 py-2.5 text-sm text-white"
                     style={{ backgroundColor: "#d070fb" }}
@@ -1094,7 +1094,7 @@ export default function ChatView({
             return (
               <div
                 key={msg.id}
-                className="mt-2 flex flex-col items-start gap-1"
+                className="mt-2 mb-3 flex flex-col items-start gap-1"
               >
                 <span className="ml-1 text-xs font-medium text-zinc-600">
                   {senderName}
@@ -1115,7 +1115,7 @@ export default function ChatView({
                 </span>
               </div>
             )}
-            <div ref={messagesEndRef} className="h-0 shrink-0 w-full" aria-hidden />
+            <div ref={messagesEndRef} className="h-0 shrink-0 w-full pb-8" aria-hidden />
           </div>
         </main>
 

@@ -13,6 +13,10 @@ export default function AdminView() {
     const router = useRouter();
     const [users, setUsers] = useState<UserSearchResultDTO[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    const [searchUniversityName, setSearchUniversityName] = useState('');
+
+    const [searchKeyword, setSearchKeyword] = useState('');
     
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState<TabType>('ALL');
@@ -89,11 +93,13 @@ export default function AdminView() {
 
     const filteredUsers = useMemo(() => {
         return users.filter(user => {
-            const matchesSearch = user.name.includes(searchQuery) || user.studentId.includes(searchQuery);
+            const matchesUni = searchUniversityName.trim() === '' || user.universityName.includes(searchUniversityName.trim());
+            const matchesKeyword = searchKeyword.trim() === '' || user.name.includes(searchKeyword.trim()) || user.studentId.includes(searchKeyword.trim());
             const matchesTab = activeTab === 'ALL' ? true : activeTab === 'ONLINE' ? user.isOnline : !user.isOnline;
-            return matchesSearch && matchesTab;
+            
+            return matchesUni && matchesKeyword && matchesTab;
         });
-    }, [users, searchQuery, activeTab]);
+    }, [users, searchUniversityName, searchKeyword, activeTab]);
 
     const openDeleteModal = (user: UserSearchResultDTO) => {
         setTargetUser(user);
@@ -135,6 +141,13 @@ export default function AdminView() {
         }
     };
 
+    const isSearchEmpty = searchUniversityName.trim() === '' && searchKeyword.trim() === '';
+
+    const handleClearSearch = () => {
+        setSearchUniversityName('');
+        setSearchKeyword('');
+    };
+
     return (
         <div className="min-h-screen bg-zinc-50 flex flex-col font-sans text-zinc-900">
             <header className="bg-zinc-900 text-white h-16 flex items-center justify-between px-6 shrink-0 shadow-md z-10">
@@ -152,15 +165,62 @@ export default function AdminView() {
             </header>
 
             <main className="flex-1 max-w-5xl w-full mx-auto p-6 flex flex-col gap-6">
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 flex gap-4 items-center">
-                    <div className="flex-1 relative">
-                        <input 
-                            type="text" 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="사용자 이름 또는 학번으로 검색해 주세요."
-                            className="w-full bg-zinc-100 pl-11 pr-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-base text-zinc-900"
-                        />
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 flex flex-col sm:flex-row gap-4 items-end">
+                    
+                    <label className="flex-1 flex flex-col gap-1.5 w-full">
+                        <span className="text-[13px] font-bold text-zinc-700 ml-1">학교명</span>
+                        <div className="relative flex items-center w-full">
+                            <input 
+                                type="text" 
+                                value={searchUniversityName}
+                                onChange={(e) => setSearchUniversityName(e.target.value)}
+                                placeholder="ex) 한국대"
+                                className="w-full bg-zinc-100 px-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-sm text-zinc-900 placeholder:text-zinc-400 border border-transparent focus:border-indigo-300 focus:bg-white shadow-inner"
+                            />
+                            {searchUniversityName && (
+                                <button type="button" onClick={() => setSearchUniversityName('')} className="absolute right-3 text-zinc-400 hover:text-zinc-600 transition-colors p-1">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            )}
+                        </div>
+                    </label>
+
+                    <label className="flex-1 flex flex-col gap-1.5 w-full">
+                        <span className="text-[13px] font-bold text-zinc-700 ml-1">학번 또는 이름</span>
+                        <div className="relative flex items-center w-full">
+                            <input 
+                                type="text" 
+                                value={searchKeyword}
+                                onChange={(e) => setSearchKeyword(e.target.value)}
+                                placeholder="ex) 20260001 또는 김철수"
+                                className="w-full bg-zinc-100 px-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-sm text-zinc-900 placeholder:text-zinc-400 border border-transparent focus:border-indigo-300 focus:bg-white shadow-inner"
+                            />
+                            {searchKeyword && (
+                                <button type="button" onClick={() => setSearchKeyword('')} className="absolute right-3 text-zinc-400 hover:text-zinc-600 transition-colors p-1">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            )}
+                        </div>
+                    </label>
+
+                    <div className="flex gap-2 w-full sm:w-auto shrink-0 mt-2 sm:mt-0">
+                        <button 
+                            type="button"
+                            onClick={handleClearSearch}
+                            disabled={isSearchEmpty}
+                            title="모든 검색어 지우기"
+                            className="flex items-center justify-center h-[52px] w-[52px] bg-zinc-100 border border-zinc-200 text-zinc-500 rounded-xl hover:bg-zinc-200 hover:text-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shrink-0"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                        <button 
+                            type="button"
+                            disabled={isSearchEmpty}
+                            className="flex-1 sm:flex-none h-[52px] px-8 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl font-black text-[15px] hover:from-indigo-600 hover:to-violet-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-md active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            <span>검색</span>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        </button>
                     </div>
                 </div>
 

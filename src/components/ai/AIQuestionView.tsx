@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { MessageFactory } from '@/domain/message/MessageFactory';
 import type { ChatRoomListItemDTO } from '@/entities/ChatRoomListItem';
 import type { ParticipantsDTO } from '@/entities/Participants';
@@ -20,12 +21,16 @@ interface Props {
     userId: string;
     chatRooms: ChatRoomListItemDTO[];
     onSendToRooms: (roomIdList: string[], messagePayload: any) => Promise<void>
+    onClose?: () => void
 }
 
 const MAX_AI_QUOTA = 10;
 const getTodayKey = (uid: string) => `ai_quota_${uid}_${new Date().toISOString().split('T')[0]}`;
 
-export default function AiQuestionView({ userId, chatRooms: initialChatRooms, onSendToRooms }: Props) {
+export default function AiQuestionView({ userId, chatRooms: initialChatRooms, onSendToRooms, onClose }: Props) {
+
+const router = useRouter(); // 🚀 메인 이동용 라우터
+
     const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>(initialChatRooms);
 
     const [prompt, setPrompt] = useState('');
@@ -44,6 +49,8 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     const [usedQuota, setUsedQuota] = useState<number>(0);
     const abortControllerRef = useRef<AbortController | null>(null);
     const closedByPopStateRef = useRef(false);
+
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     
     useEffect(() => {
         if (typeof window !== 'undefined' && userId){
@@ -61,12 +68,21 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
     const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
     const [isSending, setIsSending] = useState(false);
 
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+
     useEffect(() => { setChatRooms(initialChatRooms); }, [initialChatRooms]);
     useEffect(() => { checkAiConnection(selectedModel); }, [selectedModel]);
 
     useEffect(() => {
         return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
     }, []);
+
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'; 
+            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 250)}px`;
+        }
+    }, [prompt]);
 
     const checkAiConnection = async (model: string) => {
         setAiStatus('checking');
@@ -168,6 +184,10 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
             await onSendToRooms(selectedRoomIds, aiMsg);
             setSelectedRoomIds([]);
             setIsRoomListOpen(false);
+
+            setTimeout(() => {
+                setShowConfirmModal(true);
+            }, 150);
         } finally {
             setIsSending(false);
         }
@@ -289,74 +309,24 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
 
                 <div className="ai-content-layout flex-1 min-h-0 p-4 sm:p-6 max-w-4xl mx-auto w-full">
                     
-                    <div className="space-y-2">
-                        <div className="flex justify-between items-end mb-1 px-1">
-                            <label className="text-[15px] font-black text-zinc-950 flex items-center gap-2 tracking-tight">
-                                AI에게 질문해주세요.
-                                <span className="hidden sm:inline bg-zinc-100 text-zinc-700 border-2 border-zinc-200 text-[11px] px-2.5 py-0.5 rounded-full font-bold shadow-sm">Ctrl + Enter 전송</span>
-                            </label>
-                            <span className={`text-xs font-black px-2.5 py-1 rounded-lg border-2 shadow-sm ${isQuotaExceeded ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-zinc-100 text-zinc-700 border-zinc-300'}`}>
-                                할당량: <span className={isQuotaExceeded ? 'text-red-700' : 'text-indigo-700'}>{remainQuota}</span> / {MAX_AI_QUOTA}
-                            </span>
-                        </div>
-                        
-                        <textarea 
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            onKeyDown={(e) => {
-                                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                                    e.preventDefault();
-                                    if (!isLoading && prompt.trim() && aiStatus !== 'offline') requestAiAnswer();
-                                }
-                            }}
-                            disabled={isLoading}
-                            placeholder="(Ctrl + Enter 키로 바로 전송 가능)"
-                            className={`w-full h-36 p-5 bg-white border-2 rounded-2xl resize-none outline-none transition-all shadow-sm text-[16px] leading-relaxed font-bold text-zinc-950 placeholder:font-semibold placeholder:text-zinc-400 ${isQuotaExceeded ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' : 'border-zinc-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100'}`}
-                        />
-                    </div>
-
-                    <div className="ai-action-row">
-                        <button
-                            type="button"
-                            onClick={handleClearPrompt}
-                            disabled={isLoading || (!prompt && !aiResponse && !aiError)}
-                            className="ai-btn-reset"
-                        >
-                            초기화
-                        </button>
-                        {isLoading ? (
-                            <button type="button" onClick={handleCancelGeneration} className="ai-btn-submit ai-btn-cancel">
-                                생성 중단하기
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={requestAiAnswer}
-                                className="ai-btn-submit ai-btn-generate"
-                            >
-                                답변 생성하기
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="ai-response-panel bg-white border-2 border-zinc-200 rounded-2xl custom-scrollbar shadow-inner">
+                    <div className="ai-response-panel bg-white border-2 border-zinc-200 rounded-2xl custom-scrollbar shadow-inner flex flex-col relative z-0">
                         {!aiResponse && !aiError && !isLoading && (
-                            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center text-zinc-400 text-center px-4 py-8 m-2 border-2 border-dashed border-zinc-200 rounded-2xl bg-zinc-50/50">
-                                <span className="text-6xl mb-4">💡</span>
+                            <div className="flex h-full min-h-[12rem] flex-1 flex-col items-center justify-center text-zinc-400 text-center px-4 py-8 m-2 border-2 border-dashed border-zinc-200 rounded-2xl bg-zinc-50/50">
                                 <span className="text-[15px] font-extrabold text-zinc-500 leading-relaxed">
-                                    질문을 입력하고 <span className="text-zinc-800">답변 생성하기</span> 버튼(또는 Ctrl + Enter)을 눌러주세요.
+                                    하단에 질문을 입력하고 <span className="text-zinc-800">전송</span> 버튼(또는 Enter)을 눌러주세요.
                                 </span>
                             </div>
                         )}
 
                         {isLoading && (
-                            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center text-indigo-600 gap-5 bg-indigo-50/30 rounded-2xl px-4 py-8">
+                            <div className="flex h-full min-h-[12rem] flex-1 flex-col items-center justify-center text-indigo-600 gap-5 bg-indigo-50/30 rounded-2xl px-4 py-8">
                                 <div className="w-12 h-12 border-[5px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin shadow-sm"></div>
                                 <span className="font-black text-[15px] animate-pulse tracking-wide bg-white px-4 py-2 rounded-xl shadow-sm border border-indigo-100">AI 답변 생성 중입니다. 잠시만 기다려주세요...</span>
                             </div>
                         )}
+
                         {aiError && !isLoading && (
-                            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center text-red-600 gap-4 px-6 py-8 text-center bg-red-50 rounded-2xl m-2 border border-red-200">
+                            <div className="flex h-full min-h-[12rem] flex-1 flex-col items-center justify-center text-red-600 gap-4 px-6 py-8 text-center bg-red-50 rounded-2xl m-2 border border-red-200">
                                 <span className="font-black text-[15px] bg-white px-5 py-3 rounded-xl shadow-sm border-2 border-red-200">{aiError}</span>
                             </div>
                         )}
@@ -367,8 +337,103 @@ export default function AiQuestionView({ userId, chatRooms: initialChatRooms, on
                             </div>
                         )}
                     </div>
+
+                    <div className="space-y-2 shrink-0 z-10">
+                        <div className="flex justify-between items-end mb-1 px-1">
+                            <label className="text-[15px] font-black text-zinc-950 flex items-center gap-2 tracking-tight">
+                                AI에게 질문해주세요.
+                            </label>
+                            <span className={`text-[11px] font-black px-2.5 py-1 rounded-lg border-2 shadow-sm ${isQuotaExceeded ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-zinc-100 text-zinc-700 border-zinc-300'}`}>
+                                일일 질문: <span className={isQuotaExceeded ? 'text-red-700' : 'text-indigo-700'}>{usedQuota}</span> / {MAX_AI_QUOTA}
+                            </span>
+                        </div>
+                        
+                        <div className={`relative flex flex-col w-full bg-white border-2 rounded-2xl transition-all shadow-sm overflow-hidden ${isQuotaExceeded ? 'border-red-400 focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-100' : 'border-zinc-300 focus-within:border-indigo-600 focus-within:ring-4 focus-within:ring-indigo-100'}`}>
+                            
+                            <textarea 
+                                ref={textareaRef}
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.nativeEvent.isComposing) return;
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        if (!isLoading && prompt.trim() && aiStatus !== 'offline') requestAiAnswer();
+                                    }
+                                }}
+                                disabled={isLoading}
+                                placeholder="프롬프트를 입력해 주세요."
+                                className="w-full min-h-[90px] max-h-[30vh] p-5 bg-transparent resize-none outline-none text-[16px] leading-[1.6] font-bold text-zinc-950 placeholder:font-semibold placeholder:text-zinc-400 custom-scrollbar"
+                            />
+                            
+                            <div className="flex items-center justify-between px-4 py-3 bg-zinc-50 border-t border-zinc-100 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={handleClearPrompt}
+                                    disabled={isLoading || (!prompt && !aiResponse && !aiError)}
+                                    className="px-5 py-2.5 rounded-xl text-sm font-black text-zinc-600 bg-white border-2 border-zinc-200 hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                >
+                                    초기화
+                                </button>
+                                
+                                {isLoading ? (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleCancelGeneration} 
+                                        className="px-6 py-2.5 rounded-xl text-sm font-black text-white bg-red-600 border-2 border-red-700 hover:bg-red-700 transition-all shadow-sm animate-pulse"
+                                    >
+                                        생성 중단
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={requestAiAnswer}
+                                        disabled={!prompt.trim() || aiStatus === 'offline'}
+                                        className="px-6 py-2.5 rounded-xl text-sm font-black text-white bg-indigo-600 border-2 border-indigo-700 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-2"
+                                    >
+                                        <span>전송</span>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 12h14M12 5l7 7-7 7" /></svg>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
+
+            {showConfirmModal && (
+                <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/60 animate-fade-in px-4">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden animate-slide-up flex flex-col">
+                        <div className="p-6 flex flex-col items-center text-center">
+                            <div className="w-14 h-14 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-full flex items-center justify-center mb-4 shadow-md">
+                                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                            </div>
+                            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 mb-2">FlashTalk</h3>
+                            <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">
+                                메인 화면으로 이동하시겠습니까?
+                            </p>
+                        </div>
+                        <div className="flex border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+                            <button 
+                                onClick={() => setShowConfirmModal(false)}
+                                className="flex-1 py-4 text-sm font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border-r border-zinc-100 dark:border-zinc-800"
+                            >
+                                닫기
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setShowConfirmModal(false);
+                                    if(onClose) onClose(); 
+                                    else router.push('/main');
+                                }}
+                                className="flex-1 py-4 text-sm font-extrabold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                            >
+                                확인
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <style jsx>{`
                 .room-checkbox {

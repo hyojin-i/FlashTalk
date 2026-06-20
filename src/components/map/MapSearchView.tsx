@@ -27,7 +27,16 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     return Math.round(R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))));
 }
 
-interface Props { userId: string; chatRooms: ChatRoomListItemDTO[]; onSendToRooms: (roomIdList: string[], messagePayload: any) => Promise<void>; }
+interface Props { userId: string; chatRooms: ChatRoomListItemDTO[]; onSendToRooms: (roomIdList: string[], messagePayload: any) => Promise<void>; onClose?: () => void}
+
+interface ShareTarget {
+    placeName: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    distance?: number;
+    mapImageUrl?: string | null;
+}
 
 interface SelectedTarget {
     type: 'search' | 'myLocation';
@@ -40,7 +49,7 @@ interface SelectedTarget {
     mapImageUrl?: string | null;
 }
 
-export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Props) {
+export default function MapSearchView({ userId, chatRooms, onSendToRooms, onClose }: Props) {
     const router = useRouter();
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +58,8 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
     const [lastSearchedKeyword, setLastSearchedKeyword] = useState('');
 
     const [isComposing, setIsComposing] = useState(false);
+    const composingRef = useRef(false);
+    const safeKeywordRef = useRef('')
     
     const [isSearched, setIsSearched] = useState(false); 
     const [results, setResults] = useState<LocationResult[]>([]);
@@ -65,7 +76,10 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
 
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
+    const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
     const [isSending, setIsSending] = useState(false);
+
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     const selectedTargetRef = useRef(selectedTarget);
     const isSheetOpenRef = useRef(isSheetOpen);
@@ -121,7 +135,9 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
 
         const handleVisibilityChange = () => { if (document.visibilityState === 'visible') updateLocation(); };
 
-        const handleFocus = () => { updateLocation(); };
+        const handleFocus = () => { 
+            if (!myCoords && !gpsDenied) updateLocation(); 
+        };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -137,6 +153,12 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
     useEffect(() => {
         if (gpsDenied) setActiveSort('accuracy');
     }, [gpsDenied]);
+
+    useEffect(() => {
+        if (!selectedTarget && inputRef.current && keyword) {
+            inputRef.current.value = keyword;
+        }
+    }, [selectedTarget, keyword]);
 
     useEffect(() => {
         if (!selectedTarget) {
@@ -236,13 +258,42 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
             type: 'search', id: loc.id, placeName: loc.placeName, address: loc.address,
             latitude: loc.latitude, longitude: loc.longitude, distance: loc.distance, mapImageUrl: null
         });
+        setIsSheetOpen(false); 
         try {
             const res = await fetch(`/api/map?action=image&lat=${loc.latitude}&lng=${loc.longitude}`);
             const data = await res.json();
-            if (res.ok) {
-                setSelectedTarget(prev => prev?.id === loc.id ? { ...prev, mapImageUrl: data.imageUrl } : prev);
-            }
+            if (res.ok) setSelectedTarget(prev => prev?.id === loc.id ? { ...prev, mapImageUrl: data.imageUrl } : prev);
         } catch (e) {}
+    };
+
+    const openShareSheetForMyLocation = () => {
+        if (!myCoords || !myLocationData) return;
+        setShareTarget({
+            placeName: "현재 위치", 
+            address: myLocationData.address, 
+            latitude: myCoords.lat, 
+            longitude: myCoords.lng, 
+            distance: 0, 
+            mapImageUrl: myLocationData.mapImageUrl
+        });
+        setIsSheetOpen(true); 
+    };
+
+    const openShareSheet = (target: SelectedTarget) => {
+        setShareTarget({
+            placeName: target.placeName,
+            address: target.address,
+            latitude: target.latitude,
+            longitude: target.longitude,
+            distance: target.distance,
+            mapImageUrl: target.mapImageUrl
+        });
+        setIsSheetOpen(true);
+    };
+
+    const closeShareSheet = () => {
+        setIsSheetOpen(false);
+        setSelectedRoomIds([]); 
     };
 
     const handleSelectMyLocation = () => {
@@ -261,24 +312,53 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
 
     const handleBackToList = () => {
         setSelectedTarget(null);
+        setIsSheetOpen(false);
+
+        setTimeout(() => {
+            if (inputRef.current) {
+                inputRef.current.value = keyword;
+            }
+        }, 0);
+    };
+
+    const clearSearch = () => {
+        setKeyword('');
+        safeKeywordRef.current = '';
+        setLastSearchedKeyword('');
+        setResults([]);
+        setIsSearched(false);
+        setSelectedTarget(null);
+        if (inputRef.current) inputRef.current.value = '';
     };
 
     const toggleRoomSelection = (roomId: string) => setSelectedRoomIds(prev => prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId]);
 
     const executeShare = async () => {
-        if (selectedRoomIds.length === 0 || !selectedTarget) return;
+        const target = shareTarget || selectedTarget;
+
+        if (selectedRoomIds.length === 0 || !target) return;
 
         const mapMsg = MessageFactory.createMessage('map', {
-            placeName: selectedTarget.placeName, address: selectedTarget.address,
-            latitude: selectedTarget.latitude, longitude: selectedTarget.longitude,
-            mapImageUrl: selectedTarget.mapImageUrl || "", distanceFromSender: selectedTarget.distance
+            placeName: target.placeName, address: target.address,
+            latitude: target.latitude, longitude: target.longitude,
+            mapImageUrl: target.mapImageUrl || "", distanceFromSender: target.distance
         }, userId, "temp");
 
         setIsSending(true);
         try {
             await onSendToRooms(selectedRoomIds, mapMsg); 
-            setIsSheetOpen(false); setSelectedRoomIds([]); 
-            setSelectedTarget(null); 
+            
+            setIsSheetOpen(false); 
+            setSelectedRoomIds([]); 
+            setShareTarget(null);
+            
+            setTimeout(() => {
+                setShowConfirmModal(true);
+            }, 150);
+            
+        } catch (error) {
+            console.error("공유 실패:", error);
+            alert("공유에 실패했습니다. 다시 시도해주세요.");
         } finally { setIsSending(false); }
     };
 
@@ -309,15 +389,43 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
                             <div className="flex-1 relative flex items-center bg-zinc-100 dark:bg-zinc-950 rounded-xl outline-none focus-within:ring-2 focus-within:ring-sky-500/50 transition-shadow border border-transparent dark:border-zinc-800">
                                 <input 
                                 ref={inputRef}
-                                    type="text" 
-                                    value={keyword} 
+                                    type="text"  
                                     onChange={e => { 
-                                        setKeyword(e.target.value); 
-                                        if (e.target.value.trim() === '') { setResults([]); setIsSearched(false); } 
+                                        const val = e.target.value;
+                                        setKeyword(val); 
+                                        safeKeywordRef.current = val;
+                                        if (val.trim() === '') { setResults([]); setIsSearched(false); }
                                     }} 
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' && keyword.trim() !== '') handleSearchClick();
-                                    }} 
+                                    
+                                    onCompositionStart={() => {
+                                        setIsComposing(true);
+                                        composingRef.current = true;
+                                    }}
+                                    onCompositionEnd={(e) => { 
+                                        setIsComposing(false);
+                                        composingRef.current = false;
+                                        setKeyword(e.currentTarget.value);
+                                        safeKeywordRef.current = e.currentTarget.value;
+                                    }}
+                                    
+                                    onBlur={() => {
+                                        if (composingRef.current) {
+                                            const preservedText = safeKeywordRef.current;
+                                            setTimeout(() => {
+                                                setKeyword(preservedText);
+                                                if (inputRef.current) {
+                                                    inputRef.current.value = preservedText;
+                                                }
+                                            }, 0);
+                                        }
+                                    }}
+                                    
+                                    onKeyDown={e => { 
+                                        if (e.key === 'Enter' && !composingRef.current && keyword.trim() !== '') {
+                                            handleSearchClick();
+                                        } 
+                                    }}
+                                    
                                     maxLength={100} 
                                     placeholder="검색어를 입력해주세요." 
                                     className="w-full p-3 pr-10 text-base text-zinc-900 dark:text-zinc-50 font-medium placeholder-zinc-500 bg-transparent outline-none" 
@@ -329,11 +437,7 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
                                     onMouseDown={(e) => {
                                         e.preventDefault()
                                     }}
-                                        onClick={() => {
-                                            setKeyword('');
-                                            setResults([]);
-                                            setIsSearched(false);
-                                        }}
+                                        onClick={clearSearch}
                                         className="absolute right-3 p-1 rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
                                         aria-label="검색어 지우기"
                                     >
@@ -367,50 +471,71 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto pb-4 relative border-t border-zinc-100 dark:border-zinc-800">
-                        
+                    <div className="flex-1 flex flex-col overflow-hidden relative border-t border-zinc-100 dark:border-zinc-800 bg-white">
                         {isLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-zinc-950/80 z-10 backdrop-blur-sm gap-3">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-20 backdrop-blur-sm gap-3">
                                 <div className="w-8 h-8 border-4 border-zinc-200 border-t-sky-500 rounded-full animate-spin"></div>
-                                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">{gpsLoading ? "위치 정보를 가져오는 중..." : "장소 검색 중..."}</span>
+                                <span className="text-sm font-bold text-zinc-800">장소 검색 중...</span>
                             </div>
                         )}
 
                         {isNoResults ? (
-                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400">
+                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400 h-full overflow-y-auto custom-scrollbar">
                                 <span className="text-4xl mb-4">🔍</span><span className="text-sm font-medium">검색 결과가 없습니다.</span>
                             </div>
                         ) : isDefaultMode && gpsLoading ? (
-                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400"><span className="text-sm font-medium animate-pulse">위치를 찾는 중입니다...</span></div>
+                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400 h-full overflow-y-auto custom-scrollbar"><span className="text-sm font-medium animate-pulse">위치를 찾는 중입니다...</span></div>
                         ) : isDefaultMode && gpsDenied ? (
-                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400">
-                                <span className="text-4xl mb-4 opacity-50">🔍</span>
+                            <div className="w-full p-10 flex flex-col items-center justify-center text-zinc-400 h-full overflow-y-auto custom-scrollbar">
+                                <span className="text-4xl mb-4 opacity-50">🚫</span>
                                 <span className="text-sm font-medium text-center text-zinc-500 leading-relaxed">
-                                    현재 위치를 알 수 없습니다.<br/>상단의 검색창에 장소명을 입력하여 찾아보세요.
+                                    위치 권한이 없습니다.<br/>브라우저 설정에서 위치 권한을 허용해 주시거나,<br/>상단의 검색창에 장소명을 직접 입력해 주세요.
                                 </span>
                             </div>
                         ) : isDefaultMode && myLocationData && myCoords ? (
-                            <div onClick={handleSelectMyLocation} className="w-full p-8 bg-sky-50/80 dark:bg-sky-950/30 flex flex-col justify-center items-center border-b border-zinc-200 dark:border-zinc-800 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
-                                <span className="text-xs font-extrabold text-sky-600 dark:text-sky-400 mb-3 bg-white dark:bg-zinc-950 px-4 py-2 rounded-full shadow-sm border border-sky-100 dark:border-zinc-700 flex items-center gap-1.5">
-                                    <span>📍</span> 현재 내 위치 상세 보기 <svg className="w-3 h-3 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
-                                </span>
-                                <span className="text-xl font-bold text-zinc-900 dark:text-zinc-50 text-center leading-tight break-words px-4">{myLocationData.address}</span>
-                                <span className="text-xs text-zinc-400 mt-2">클릭하여 이 위치를 바로 공유하세요</span>
+                            
+                            <div className="w-full flex-1 flex flex-col bg-white animate-fade-in shadow-sm h-full">
+                                <div className="flex flex-col items-center w-full py-3 shrink-0 z-10 border-b border-zinc-100 bg-white">
+                                    <span className="text-xs font-extrabold text-sky-600 mb-1.5 bg-sky-50 px-4 py-1.5 rounded-full border border-sky-100 flex items-center gap-1.5 shadow-sm">
+                                         현재 내 위치
+                                    </span>
+                                    <span className="text-lg font-bold text-zinc-900 text-center leading-tight break-words px-2">{myLocationData.address}</span>
+                                </div>
+                                
+                                <div className="flex-1 w-full relative bg-zinc-50 flex items-center justify-center overflow-hidden">
+                                    {myLocationData.mapImageUrl ? (
+                                        <img src={myLocationData.mapImageUrl} className="w-full h-full object-contain" alt="내 위치 지도" />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className="text-sm animate-pulse text-zinc-400 font-medium">지도를 불러올 수 없습니다.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="p-3 bg-white border-t border-zinc-100 flex justify-center shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-10">
+                                    <button 
+                                        onClick={openShareSheetForMyLocation}
+                                        className="w-[90%] max-w-sm py-3.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-full font-bold text-base shadow-lg hover:from-indigo-600 hover:to-violet-600 transition-all flex items-center justify-center gap-2 active:scale-95"
+                                    >
+                                        현재 위치 대화방에 공유하기
+                                    </button>
+                                </div>
                             </div>
                         ) : (
-                            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                            <ul className="divide-y divide-zinc-100 flex-1 overflow-y-auto custom-scrollbar">
                                 {results.map((loc) => (
-                                    <li key={loc.id} onClick={() => handleSelectLocation(loc)} className="p-4 cursor-pointer flex justify-between hover:bg-sky-50/80 dark:hover:bg-zinc-900 transition-colors border-l-4 border-transparent hover:border-sky-400">
+                                    <li key={loc.id} onClick={() => handleSelectLocation(loc)} className="p-4 cursor-pointer flex justify-between hover:bg-zinc-50 transition-colors active:bg-zinc-100 border-l-4 border-transparent hover:border-sky-400">
                                         <div className="min-w-0 pr-4 flex-1">
-                                            <p className="text-base font-bold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{loc.placeName}</p>
-                                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5 break-words leading-snug">{loc.address}</p>
+                                            <p className="text-base font-bold text-zinc-900 break-words leading-tight">{loc.placeName}</p>
+                                            <p className="text-sm text-zinc-500 mt-1.5 break-words leading-snug">{loc.address}</p>
                                         </div>
-                                        <div className="flex flex-col items-end shrink-0 ml-2">
+                                        <div className="flex flex-col items-end justify-center shrink-0 ml-2">
                                             {activeSort === 'distance' && loc.distance !== undefined && (
-                                                <span className="text-xs bg-zinc-100 dark:bg-zinc-950 px-2.5 py-1 rounded-md h-fit text-zinc-600 dark:text-zinc-300 font-bold whitespace-nowrap">
+                                                <span className="text-xs bg-zinc-100 px-2.5 py-1 rounded-md text-zinc-600 font-bold whitespace-nowrap">
                                                     {loc.distance >= 1000 ? `${(loc.distance/1000).toFixed(1)}km` : `${loc.distance}m`}
                                                 </span>
                                             )}
+                                            <svg className="w-5 h-5 mt-2 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7-7" /></svg>
                                         </div>
                                     </li>
                                 ))}
@@ -419,82 +544,66 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
                     </div>
                 </div>
             ) : (
-                <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950 overflow-hidden animate-slide-in-right z-30">
-                    <div className="flex items-center p-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 shadow-sm">
-                        <button
-                            type="button"
-                            onClick={handleBackToList}
-                            className="back-to-list-btn flex items-center text-zinc-700 dark:text-zinc-50 hover:bg-zinc-100 dark:hover:bg-zinc-900 font-bold px-3 py-1.5 bg-zinc-100 dark:bg-zinc-950 rounded-lg"
-                        >
-                            <svg className="back-to-list-arrow w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
-                            목록으로 돌아가기
+
+                <div className="flex-1 flex flex-col bg-white overflow-hidden animate-slide-in-right z-30 relative">
+                    
+                    <div className="px-3 py-2 shrink-0 bg-white shadow-sm z-20 flex justify-between items-center border-b border-zinc-200">
+                        <button onClick={handleBackToList} className="px-3 py-1.5 flex items-center bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-lg transition-colors text-sm shadow-sm shrink-0">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+                            목록으로
                         </button>
-                    </div>
 
-                    <div className="flex-1 flex flex-col p-5 overflow-y-auto">
-                        <div className="shrink-0 mb-5">
-                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-1.5 block">
-                                {selectedTarget.type === 'myLocation' ? '📍 내 위치 상세 정보' : '🔍 검색된 장소 정보'}
-                            </span>
-                            <h2 className="text-2xl font-extrabold text-zinc-900 dark:text-zinc-50 leading-tight break-words">{selectedTarget.placeName}</h2>
-                            {selectedTarget.type === 'search' && (
-                                <p className="text-base text-zinc-500 mt-2 break-words leading-snug">{selectedTarget.address}</p>
-                            )}
-                            {activeSort === 'distance' && selectedTarget.distance !== undefined && selectedTarget.type === 'search' && selectedTarget.distance > 0 && (
-                                <span className="inline-block mt-3 text-sm bg-sky-50/80 dark:bg-sky-950/30 text-zinc-800 dark:text-zinc-200 px-3 py-1 rounded-full font-bold">
-                                    현재 내 위치에서 {selectedTarget.distance >= 1000 ? `${(selectedTarget.distance/1000).toFixed(1)}km` : `${selectedTarget.distance}m`}
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="flex-1 min-h-[350px] w-full bg-zinc-100 dark:bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 relative shadow-inner flex items-center justify-center">
-                            {selectedTarget.mapImageUrl ? (
-                                <img src={selectedTarget.mapImageUrl} className="absolute inset-0 w-full h-full object-contain p-2" alt="지도 상세" />
-                            ) : (
-                                <div className="absolute inset-0 flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
-                                    <span className="text-sm animate-pulse text-zinc-400 dark:text-zinc-500 font-medium">지도 이미지를 불러오는 중...</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="p-5 pb-24 border-t border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
                         <button 
-                            onClick={() => setIsSheetOpen(true)} 
+                            onClick={() => openShareSheet(selectedTarget)} 
                             disabled={!selectedTarget.mapImageUrl} 
-                            className="w-full py-4 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-2xl font-bold text-lg hover:from-indigo-600 hover:to-violet-600 disabled:opacity-50 transition-all active:scale-[0.98] shadow-md flex items-center justify-center gap-2"
+                            className="px-5 py-2 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-lg font-bold text-sm shadow-md hover:from-indigo-600 hover:to-violet-600 hover:scale-[1.02] disabled:opacity-50 transition-all flex items-center gap-1.5 shrink-0"
                         >
-                            <span>이 장소 대화방에 공유하기</span>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                            대화방 공유
                         </button>
+                    </div>
+                    
+                    <div className="px-4 py-2.5 shrink-0 bg-white z-10 flex flex-col relative border-b border-zinc-100">
+                        <span className="text-[10px] font-bold text-sky-600 mb-0.5">{selectedTarget.type === 'myLocation' ? '📍 현재 내 위치' : '🔍 검색된 장소'}</span>
+                        <h2 className="text-lg font-extrabold text-zinc-900 leading-tight truncate">{selectedTarget.placeName}</h2>
+                        <p className="text-[11px] font-medium text-zinc-500 mt-0.5 truncate">{selectedTarget.address}</p>
+                    </div>
+
+                    <div className="flex-1 w-full bg-zinc-50 relative flex items-center justify-center overflow-hidden">
+                        {selectedTarget.mapImageUrl ? (
+                            <img src={selectedTarget.mapImageUrl} className="w-full h-full object-contain" alt="지도 상세" />
+                        ) : (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-sm animate-pulse text-zinc-400 font-medium bg-white px-4 py-2 rounded-full shadow-sm">지도 이미지를 불러오는 중...</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
-            {isSheetOpen && selectedTarget && (
+            {isSheetOpen && (shareTarget || selectedTarget) && (
                 <div className="absolute inset-0 z-[100] flex flex-col justify-end">
-                    <div className="absolute inset-0 bg-black/50 transition-opacity" onClick={() => setIsSheetOpen(false)} />
-                    <div className="relative bg-white dark:bg-zinc-950 w-full h-[65%] rounded-t-3xl shadow-2xl flex flex-col animate-slide-up">
-                        <div className="flex justify-between items-center p-5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-                            <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-50">어느 대화방에 공유할까요?</h3>
-                            <button onClick={() => setIsSheetOpen(false)} className="text-zinc-500 dark:text-zinc-50 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg p-1 transition-colors">닫기</button>
+                    <div className="absolute inset-0 bg-black/50 transition-opacity animate-fade-in" onClick={closeShareSheet} />
+                    <div className="relative bg-white w-full max-h-[70%] rounded-t-3xl shadow-2xl flex flex-col animate-slide-up pb-6">
+                        <div className="flex justify-between items-center p-4 border-b border-zinc-100 shrink-0">
+                            <h3 className="font-bold text-lg text-zinc-900 pl-2">어느 대화방에 공유할까요?</h3>
+                            <button onClick={closeShareSheet} className="text-zinc-500 hover:bg-zinc-100 rounded-lg p-2 font-bold transition-colors">닫기</button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3">
+                        <div className="flex-1 overflow-y-auto p-0 custom-scrollbar">
                             {chatRooms.length === 0 ? (
-                                <div className="text-center text-zinc-500 dark:text-zinc-400 py-10 font-medium">참여 중인 대화방이 없습니다.</div>
+                                <div className="text-center text-zinc-500 py-6 font-medium">참여 중인 대화방이 없습니다.</div>
                             ) : (
-                                <ul className="flex flex-col gap-2">
+                                <ul className="flex flex-col">
                                     {chatRooms.map(room => {
                                         const isSelected = selectedRoomIds.includes(room.roomId);
                                         const title = formatChatRoomListTitle(room.participants);
                                         return (
-                                            <li key={room.roomId}>
-                                                <button onClick={() => toggleRoomSelection(room.roomId)} className={`w-full flex items-center p-4 rounded-2xl border-2 text-left transition-colors ${isSelected ? 'border-sky-400 bg-sky-50/80 dark:bg-sky-950/30' : 'border-zinc-100 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-800'}`}>
-                                                    <div className={`w-6 h-6 rounded-md border-2 mr-4 flex items-center justify-center transition-colors ${isSelected ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900' : 'border-zinc-300 dark:border-zinc-500 bg-white dark:bg-zinc-950'}`}>
-                                                        {isSelected && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 12 12"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 6l3 3 5-5" /></svg>}
+                                            <li key={room.roomId} className="border-b border-zinc-50 last:border-0">
+                                                <button onClick={() => toggleRoomSelection(room.roomId)} className={`w-full flex items-center px-4 py-3.5 transition-colors ${isSelected ? 'bg-sky-50/80' : 'bg-white hover:bg-zinc-50'}`}>
+                                                    <div className={`w-5 h-5 rounded-md border-2 mr-3 flex items-center justify-center transition-colors ${isSelected ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-zinc-300 bg-white'}`}>
+                                                        {isSelected && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 12 12"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M2 6l3 3 5-5" /></svg>}
                                                     </div>
-                                                    <span className="font-bold text-zinc-900 dark:text-zinc-50 text-base flex-1 truncate">{title}</span>
-                                                    <span className="ml-2 text-sm text-zinc-500 dark:text-zinc-300 shrink-0 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 px-2 py-0.5 rounded-full">{room.participants.length + 1}명</span>
+                                                    <span className="font-bold text-zinc-900 text-sm flex-1 truncate text-left">{title}</span>
+                                                    <span className="ml-2 text-[11px] font-bold text-zinc-500 shrink-0 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded-full">{room.participants.length + 1}명</span>
                                                 </button>
                                             </li>
                                         );
@@ -503,44 +612,68 @@ export default function MapSearchView({ userId, chatRooms, onSendToRooms }: Prop
                             )}
                         </div>
                         {selectedRoomIds.length > 0 && (
-                            <div className="p-5 bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 shrink-0">
-                                <button onClick={executeShare} disabled={isSending} className="w-full py-4 bg-sky-500 text-white font-bold rounded-2xl text-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors shadow-lg">
-                                    {isSending ? "전송 중..." : `${selectedRoomIds.length}개 대화방에 전송`}
+                            <div className="p-4 flex justify-center shrink-0 border-t border-zinc-100 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] bg-white">
+
+                                <button 
+                                    onClick={executeShare} 
+                                    disabled={isSending} 
+                                    className="px-12 py-3.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-bold rounded-full text-base shadow-lg hover:from-indigo-600 hover:to-violet-600 hover:scale-[1.02] disabled:opacity-50 transition-all flex items-center justify-center gap-2 w-[85%] max-w-sm"
+                                >
+                                    {isSending ? "전송 중..." : `${selectedRoomIds.length}개 방에 전송`}
                                 </button>
                             </div>
                         )}
                     </div>
                 </div>
             )}
+
+            {showConfirmModal && (
+                <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/60 animate-fade-in px-4">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden animate-slide-up flex flex-col">
+                        <div className="p-6 flex flex-col items-center text-center">
+                            <div className="w-14 h-14 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-full flex items-center justify-center mb-4 shadow-md">
+                                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                            </div>
+                            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 mb-2">FlashTalk</h3>
+                            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                                선택한 대화방에 지도를 공유 완료했습니다<br/>메인 화면으로 이동하시겠습니까?
+                            </p>
+                        </div>
+                        <div className="flex border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+
+                            <button 
+                                onClick={() => setShowConfirmModal(false)}
+                                className="flex-1 py-4 text-sm font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border-r border-zinc-100 dark:border-zinc-800"
+                            >
+                                닫기
+                            </button>
+
+                            <button 
+                                onClick={() => {
+                                    setShowConfirmModal(false);
+                                    if (onClose) {
+                                        onClose();
+                                    } else {
+                                        router.push('/main');
+                                    }
+                                }}
+                                className="flex-1 py-4 text-sm font-extrabold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                            >
+                                확인
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             <style jsx>{`
-                .back-to-list-btn {
-                    border: 1px solid transparent;
-                    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-                }
-                .back-to-list-btn:hover {
-                    transform: translateX(-2px);
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                    border-color: rgba(0, 0, 0, 0.08);
-                }
-                .back-to-list-btn:active {
-                    transform: translateX(-1px) scale(0.98);
-                }
-                .back-to-list-arrow {
-                    transition: transform 0.2s ease;
-                }
-                .back-to-list-btn:hover .back-to-list-arrow {
-                    transform: translateX(-3px);
-                }
-                @media (prefers-color-scheme: dark) {
-                    .back-to-list-btn:hover {
-                        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-                        border-color: rgba(255, 255, 255, 0.18);
-                    }
-                }
-                .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
-                @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+                .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+                .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+                .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
             `}</style>
         </div>

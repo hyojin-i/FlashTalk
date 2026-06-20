@@ -185,30 +185,16 @@ export default function MainView() {
 
       window.addEventListener("popstate", handlePopState);
       return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, []); 
+
+  const totalUnreadCount = useMemo(() => {
+return Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+}, [unreadCounts]);
 
   const globalMapOpenRef = useRef(globalMapOpen);
   const globalAiOpenRef = useRef(globalAiOpen);
   globalMapOpenRef.current = globalMapOpen;
   globalAiOpenRef.current = globalAiOpen;
-
-  useEffect(() => {
-      window.history.replaceState({ tab: "home" }, "", window.location.href);
-
-      const handlePopState = (e: PopStateEvent) => {
-          const state = e.state;
-          if (state?.tab === "map") {
-              setGlobalMapOpen(true);
-              setGlobalAiOpen(false);
-          } else if (state?.tab === "ai") {
-              setGlobalAiOpen(true);
-              setGlobalMapOpen(false);
-          } else {
-              setGlobalMapOpen(false);
-              setGlobalAiOpen(false);
-          }
-      };
-    })
 
   const handleNavigate = useCallback((target: 'home' | 'map' | 'ai') => {
       if (target === 'home') {
@@ -229,9 +215,6 @@ export default function MainView() {
           }
       }
   }, [globalMapOpen, globalAiOpen]);
-
-  const handleCloseMap = useCallback(() => setGlobalMapOpen(false), []);
-  const handleCloseAi = useCallback(() => setGlobalAiOpen(false), []);
 
   const visibleUsers = useMemo(
     () =>
@@ -669,12 +652,6 @@ export default function MainView() {
         })
     );
     loadChatRoomList();
-
-    if (successCount > 0) {
-        alert(`선택한 ${successCount}개의 대화방에 지도를 전송했습니다.`);
-    } else {
-        alert("지도 전송에 실패했습니다. 네트워크 상태를 확인한 후 다시 시도해 주세요.");
-    }
   };
 
   const handleSendAiToMultipleRooms = async (roomIds: string[], aiMessage: any) => {
@@ -685,7 +662,7 @@ export default function MainView() {
     await Promise.all(
       roomIds.map(async (id) => {
         try {
-          const res = await fetch("/api/chat", {
+           const res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
@@ -717,20 +694,12 @@ export default function MainView() {
       })
     );
     loadChatRoomList();
-    
-    if (successCount > 0) {
-        alert(`선택한 ${successCount}개의 대화방에 AI 답변을 전송했습니다.`);
-    } else {
-        alert("전송에 실패했습니다. AI 답변이 제대로 생성되었는지 확인해주세요.");
-    }
   };
 
   return (
     <div className="flex min-h-screen bg-zinc-100 font-sans dark:bg-black">
       <aside
-        className={`absolute sm:relative z-40 flex min-h-screen shrink-0 flex-col border-r border-zinc-200 bg-white transition-[transform,opacity,width] duration-500 ease-in-out dark:border-zinc-800 dark:bg-zinc-950 w-72 sm:w-80 shadow-2xl sm:shadow-none ${
-          sidebarOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none sm:-ml-80"
-        }`}
+        className={`absolute sm:relative z-40 flex min-h-screen shrink-0 flex-col border-r border-zinc-200 bg-white transition-all duration-1000 ease-out dark:border-zinc-800 dark:bg-zinc-950 w-72 sm:w-80 shadow-2xl sm:shadow-none ${ sidebarOpen ? "translate-x-0" : "-translate-x-full sm:translate-x-0 sm:-ml-80" }`}
         aria-hidden={!sidebarOpen}
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 px-5 dark:border-zinc-800 bg-white">
@@ -838,6 +807,13 @@ export default function MainView() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
+
+              {!sidebarOpen && totalUnreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white shadow-sm border-2 border-white">
+                    {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+                </span>
+              )}
+
               <div className="absolute top-full mt-2 left-0 px-2.5 py-1.5 bg-zinc-800 text-white text-[11px] font-bold rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50">
                 사이드바 메뉴 열기
               </div>
@@ -1063,11 +1039,11 @@ export default function MainView() {
       </div>
 
       <div className={globalMapOpen ? 'block' : 'hidden'}>
-            <MapSearchView userId={currentUser?.userId ?? ''} chatRooms={chatRooms} onSendToRooms={handleSendMapToMultipleRooms} />
+            <MapSearchView userId={currentUser?.userId ?? ''} chatRooms={chatRooms} onSendToRooms={handleSendMapToMultipleRooms} onClose={() => handleNavigate('home')}/>
         </div>
 
         <div className={globalAiOpen ? 'block' : 'hidden'}>
-            <AiQuestionView userId={currentUser?.userId ?? ''} chatRooms={chatRooms} onSendToRooms={handleSendAiToMultipleRooms} />
+            <AiQuestionView userId={currentUser?.userId ?? ''} chatRooms={chatRooms} onSendToRooms={handleSendAiToMultipleRooms} onClose={() => handleNavigate('home')} />
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 z-[120] flex items-center justify-around bg-white border-t border-zinc-200 h-16 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] pb-safe">
