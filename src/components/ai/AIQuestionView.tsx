@@ -1,9 +1,11 @@
 'use client';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageFactory } from '@/domain/message/MessageFactory';
 import type { ChatRoomListItemDTO } from '@/entities/ChatRoomListItem';
 import type { ParticipantsDTO } from '@/entities/Participants';
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function formatChatRoomListTitle(participants: ParticipantsDTO[]): string {
     const totalParticipants = participants.length + 1;
@@ -29,7 +31,7 @@ const getTodayKey = (uid: string) => `ai_quota_${uid}_${new Date().toISOString()
 
 export default function AiQuestionView({ userId, chatRooms: initialChatRooms, onSendToRooms, onClose }: Props) {
 
-const router = useRouter(); // 🚀 메인 이동용 라우터
+const router = useRouter(); 
 
     const [chatRooms, setChatRooms] = useState<ChatRoomListItemDTO[]>(initialChatRooms);
 
@@ -42,7 +44,7 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
     const [aiResponse, setAiResponse] = useState<string | null>(null);
     const [aiError, setAiError] = useState<string | null>(null);
     const [displayedResponse, setDisplayedResponse] = useState<string>('');
-    
+     
     const [isLoading, setIsLoading] = useState(false);
     const [aiStatus, setAiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
     
@@ -51,6 +53,8 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
     const closedByPopStateRef = useRef(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const [isMultiLine, setIsMultiLine] = useState(false);
     
     useEffect(() => {
         if (typeof window !== 'undefined' && userId){
@@ -77,10 +81,28 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
         return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
     }, []);
 
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto'; 
-            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 250)}px`;
+   useIsomorphicLayoutEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+
+        el.style.height = '44px';
+        el.style.paddingRight = '90px'; 
+        el.style.paddingBottom = '10px'; 
+        
+        const rawScrollHeight = el.scrollHeight;
+        
+        const isMulti = rawScrollHeight > 48;
+        setIsMultiLine(isMulti); 
+
+        if (isMulti) {
+            el.style.paddingRight = '12px'; 
+            el.style.paddingBottom = '44px'; 
+            
+            el.style.height = 'auto'; 
+            const finalHeight = el.scrollHeight;
+            el.style.height = `${Math.min(finalHeight, 150)}px`;
+        } else {
+            el.style.height = '44px';
         }
     }, [prompt]);
 
@@ -125,7 +147,7 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
             const res = await fetch('/api/ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'generate', prompt, timeout: 60000, model: selectedModel }),
+                body: JSON.stringify({ action: 'generate', prompt: submittedPrompt || prompt, timeout: 60000, model: selectedModel }),
                 signal: abortControllerRef.current.signal
             });
             const data = await res.json();
@@ -163,6 +185,13 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
         setAiResponse(null);
         setAiError(null);
         setDisplayedResponse('');
+
+        if (textareaRef.current) {
+            textareaRef.current.style.height = '44px';
+            textareaRef.current.style.paddingBottom = '10px';
+            textareaRef.current.style.paddingRight = '90px';
+            textareaRef.current.focus(); // 자연스럽게 다시 타이핑할 수 있도록 포커스 유지
+        }
     };
 
     const requestShareAiResponse = async () => {
@@ -348,7 +377,7 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
                             </span>
                         </div>
                         
-                        <div className={`relative flex flex-col w-full bg-white border-2 rounded-2xl transition-all shadow-sm overflow-hidden ${isQuotaExceeded ? 'border-red-400 focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-100' : 'border-zinc-300 focus-within:border-indigo-600 focus-within:ring-4 focus-within:ring-indigo-100'}`}>
+                        <div className={`relative flex items-end w-full bg-white border-2 rounded-2xl transition-all shadow-sm overflow-hidden p-1.5 ${isQuotaExceeded ? 'border-red-400 focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-100' : 'border-zinc-300 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100'}`}>
                             
                             <textarea 
                                 ref={textareaRef}
@@ -363,36 +392,39 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
                                 }}
                                 disabled={isLoading}
                                 placeholder="프롬프트를 입력해 주세요."
-                                className="w-full min-h-[90px] max-h-[30vh] p-5 bg-transparent resize-none outline-none text-[16px] leading-[1.6] font-bold text-zinc-950 placeholder:font-semibold placeholder:text-zinc-400 custom-scrollbar"
+                                className="flex-1 bg-transparent resize-none outline-none text-[15px] leading-[22px] font-bold text-zinc-950 placeholder:font-medium placeholder:text-zinc-400 custom-scrollbar pt-[10px] pl-3"
                             />
                             
-                            <div className="flex items-center justify-between px-4 py-3 bg-zinc-50 border-t border-zinc-100 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={handleClearPrompt}
-                                    disabled={isLoading || (!prompt && !aiResponse && !aiError)}
-                                    className="px-5 py-2.5 rounded-xl text-sm font-black text-zinc-600 bg-white border-2 border-zinc-200 hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                                >
-                                    초기화
-                                </button>
+                            <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5 shrink-0 z-10 bg-white/90 backdrop-blur-sm rounded-xl p-[2px]">
+                                {prompt.trim() !== '' && !isLoading && (
+                                    <button
+                                        type="button"
+                                        onClick={handleClearPrompt}
+                                        title="입력 내용 지우기"
+                                        className="flex h-[36px] w-[36px] items-center justify-center rounded-lg bg-zinc-100 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 transition-colors shadow-sm"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                )}
                                 
                                 {isLoading ? (
                                     <button 
                                         type="button" 
                                         onClick={handleCancelGeneration} 
-                                        className="px-6 py-2.5 rounded-xl text-sm font-black text-white bg-red-600 border-2 border-red-700 hover:bg-red-700 transition-all shadow-sm animate-pulse"
+                                        title="생성 중단"
+                                        className="flex h-[36px] w-[36px] items-center justify-center rounded-xl bg-red-500 text-white shadow-md hover:bg-red-600 transition-all animate-pulse"
                                     >
-                                        생성 중단
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                                     </button>
                                 ) : (
                                     <button
                                         type="button"
                                         onClick={requestAiAnswer}
                                         disabled={!prompt.trim() || aiStatus === 'offline'}
-                                        className="px-6 py-2.5 rounded-xl text-sm font-black text-white bg-indigo-600 border-2 border-indigo-700 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-2"
+                                        title="전송 (Enter)"
+                                        className="flex h-[36px] w-[36px] items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                                     >
-                                        <span>전송</span>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 12h14M12 5l7 7-7 7" /></svg>
+                                        <svg className="w-4 h-4 translate-x-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                                     </button>
                                 )}
                             </div>
@@ -482,8 +514,8 @@ const router = useRouter(); // 🚀 메인 이동용 라우터
                 }
                 .ai-content-layout {
                     display: grid;
-                    grid-template-rows: auto auto minmax(0, 1fr);
-                    gap: 1.25rem;
+                    grid-template-rows: minmax(0, 1fr) auto;
+                    gap: 0.75rem;
                     overflow: hidden;
                 }
                 .ai-action-row {
